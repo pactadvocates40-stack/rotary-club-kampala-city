@@ -332,6 +332,36 @@ export default function App() {
         .rot-qr-img { width:260px; height:260px; border:6px solid var(--azure-deep); border-radius:12px; padding:10px; background:#fff; }
         .rot-doorsign-sub { font-style:italic; color:#5b6a86; margin-bottom:6px; }
         @media print { .rot-tabs,.rot-notice,.rot-btn { display:none !important; } .rot-qr-img { width:320px; height:320px; } }
+
+        /* ---- Mobile layout ---- */
+        @media (max-width: 640px) {
+          .rot-wrap { padding:16px 12px 28px; }
+          .rot-title { font-size:24px; }
+          .rot-eyebrow { font-size:10px; letter-spacing:0.12em; }
+          .rot-sub { font-size:13px; }
+          .rot-tabs { gap:2px; overflow-x:auto; flex-wrap:nowrap; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+          .rot-tabs::-webkit-scrollbar { display:none; }
+          .rot-tab { padding:10px 10px; font-size:13px; white-space:nowrap; flex:0 0 auto; }
+          .rot-panel { padding:16px; margin-top:16px; border-radius:8px; }
+          .rot-row { flex-direction:column; gap:0; }
+          .rot-row > * { min-width:100%; }
+          .rot-radios { flex-wrap:wrap; gap:12px; }
+          .rot-btn { padding:13px 16px; font-size:15px; }
+          .rot-btn-block, .rot-card-preview button { width:100%; }
+          .rot-stats { gap:10px; }
+          .rot-stat { min-width: calc(50% - 5px); flex:0 0 calc(50% - 5px); padding:12px; }
+          .rot-stat .n { font-size:22px; }
+          .rot-subtabs { gap:6px; overflow-x:auto; flex-wrap:nowrap; -webkit-overflow-scrolling:touch; }
+          .rot-subtab { padding:6px 12px; font-size:12px; white-space:nowrap; flex:0 0 auto; }
+          .rot-person { flex-direction:column; align-items:flex-start; gap:8px; }
+          .rot-person > button { width:100%; }
+          .rot-card-preview { gap:10px; }
+          .rot-card-preview > div { display:flex; flex-direction:column; width:100%; gap:8px; }
+          .rot-card-preview > div > button { width:100%; }
+          .rot-qr-img { width:200px; height:200px; }
+          .rot-doorsign-h { font-size:20px; }
+          h4 { font-size:15px; }
+        }
       `}</style>
 
       <div className="rot-header">
@@ -367,7 +397,7 @@ export default function App() {
                   ))}
                 </div>
               </div>
-              <button type="button" className="rot-btn" disabled={visBusy} onClick={submitVisitor}>{visBusy ? <Loader2 size={16}/> : <UserPlus size={16}/>} Register as visitor</button>
+              <button type="button" className="rot-btn rot-btn-block" disabled={visBusy} onClick={submitVisitor}>{visBusy ? <Loader2 size={16}/> : <UserPlus size={16}/>} Register as visitor</button>
               <div className="rot-notice">{todayVisitors.length} visitor(s) registered today · {visitors.length} all-time.</div>
             </div>
           )}
@@ -397,7 +427,7 @@ export default function App() {
                   <div style={{ marginTop: 16 }}>
                     <div className="rot-row"><div className="rot-field"><label>Date of activity</label><input type="date" value={makeupForm.date} onChange={(e) => setMakeupForm({ ...makeupForm, date: e.target.value })} /></div></div>
                     <div className="rot-field"><label>What did you do for your make-up?</label><textarea rows={3} value={makeupForm.detail} onChange={(e) => setMakeupForm({ ...makeupForm, detail: e.target.value })} placeholder="e.g. Attended Rotary Club of Jinja's Tuesday meeting" /></div>
-                    <button type="button" className="rot-btn gold" disabled={makeupBusy} onClick={logMakeup}>{makeupBusy ? <Loader2 size={16}/> : <ClipboardList size={16}/>} Log make-up &amp; get card</button>
+                    <button type="button" className="rot-btn gold rot-btn-block" disabled={makeupBusy} onClick={logMakeup}>{makeupBusy ? <Loader2 size={16}/> : <ClipboardList size={16}/>} Log make-up &amp; get card</button>
                   </div>
                   {myMakeups.length > 0 && (
                     <>
@@ -433,7 +463,7 @@ export default function App() {
                         </div>
                         <div className="rot-field"><label>Email (make-up cards go here)</label><input type="email" value={newMember.email} onChange={(e) => setNewMember({ ...newMember, email: e.target.value })} placeholder="you@example.com" /></div>
                       </div>
-                      <button type="button" className="rot-btn" disabled={memberBusy || buddyGroups.length === 0} onClick={registerMember}>{memberBusy ? <Loader2 size={16}/> : <UserPlus size={16}/>} Register as a member</button>
+                      <button type="button" className="rot-btn rot-btn-block" disabled={memberBusy || buddyGroups.length === 0} onClick={registerMember}>{memberBusy ? <Loader2 size={16}/> : <UserPlus size={16}/>} Register as a member</button>
                     </div>
                   </div>
                 )
@@ -474,7 +504,7 @@ export default function App() {
                 <input type="text" inputMode="numeric" autoComplete="off" value={pinInput} onChange={(e) => setPinInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && tryUnlock()} placeholder="e.g. 1905" autoFocus />
               </div>
               {pinError && <div className="rot-notice" style={{ color: "#7A1F2B", borderColor: "#7A1F2B" }}>{pinError}</div>}
-              <button type="button" className="rot-btn" style={{ marginTop: 10 }} onClick={tryUnlock}><ShieldCheck size={15}/> Unlock admin</button>
+              <button type="button" className="rot-btn rot-btn-block" style={{ marginTop: 10 }} onClick={tryUnlock}><ShieldCheck size={15}/> Unlock admin</button>
             </div>
           )}
 
