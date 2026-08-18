@@ -274,10 +274,17 @@ export default function App() {
     if (error) { flash("Could not remove member.", "err"); return; }
     setMembers(members.filter((x) => x.id !== m.id)); flash("Member removed.");
   };
+  const toggleVerified = async (mk) => {
+    const next = !mk.verified;
+    const { error } = await supabase.from("makeups").update({ verified: next, verified_at: next ? new Date().toISOString() : null }).eq("id", mk.id);
+    if (error) { flash("Could not update verification.", "err"); return; }
+    setMakeups(makeups.map((x) => (x.id === mk.id ? { ...x, verified: next } : x)));
+    flash(next ? "Marked as verified." : "Marked as pending.");
+  };
   const exportCsv = (which) => {
     if (which === "members") downloadBlob("rotary-members.csv", csv([["Name","Buddy Group","Email","Registered At"], ...members.map((m) => [m.name, m.buddy_group, m.email, m.registered_at])]));
     else if (which === "visitors") downloadBlob("rotary-visitors.csv", csv([["Name","Home Club","Email","Category","Date","Registered At"], ...visitors.map((v) => [v.name, v.home_club, v.email, v.category, v.visit_date, v.registered_at])]));
-    else downloadBlob("rotary-makeups.csv", csv([["Name","Buddy Group","Email","Detail","Date","Card ID","Logged At"], ...makeups.map((m) => [m.name, m.buddy_group, m.email, m.detail, m.activity_date, m.card_id, m.logged_at])]));
+    else downloadBlob("rotary-makeups.csv", csv([["Name","Buddy Group","Email","Detail","Date","Verified","Card ID","Logged At"], ...makeups.map((m) => [m.name, m.buddy_group, m.email, m.detail, m.activity_date, m.verified ? "Yes" : "No", m.card_id, m.logged_at])]));
   };
 
   const todayVisitors = visitors.filter((v) => v.visit_date === todayISO());
@@ -314,6 +321,8 @@ export default function App() {
         .rot-person { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border:1px solid var(--line); border-radius:7px; gap:10px; }
         .rot-person .meta { font-size:13px; color:#5b6a86; }
         .rot-badge { font-size:12px; font-weight:700; color:var(--gold); background:rgba(242,167,27,0.12); padding:3px 8px; border-radius:20px; white-space:nowrap; }
+        .rot-badge-verified { color:#1B7A3D; background:rgba(27,122,61,0.12); }
+        .rot-badge-pending { color:#A6192E; background:rgba(166,25,46,0.1); }
         .rot-toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); padding:10px 18px; border-radius:8px; font-size:14px; font-weight:600; background:var(--azure-deep); color:#fff; z-index:50; display:flex; gap:8px; align-items:center; }
         .rot-toast.err { background:#7A1F2B; }
         .rot-stats { display:flex; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
@@ -436,7 +445,10 @@ export default function App() {
                         {myMakeups.map((mk) => (
                           <div className="rot-person" key={mk.id}>
                             <div><strong>{prettyDate(mk.activity_date)}</strong><div className="meta">{mk.detail}</div></div>
-                            <button type="button" className="rot-btn ghost" onClick={() => setActiveCard(mk)}>View card</button>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span className={`rot-badge ${mk.verified ? "rot-badge-verified" : "rot-badge-pending"}`}>{mk.verified ? "Verified" : "Pending"}</span>
+                              <button type="button" className="rot-btn ghost" onClick={() => setActiveCard(mk)}>View card</button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -514,7 +526,7 @@ export default function App() {
               buddyGroups={buddyGroups} newGroup={newGroup} setNewGroup={setNewGroup} addGroup={addGroup} removeGroup={removeGroup}
               members={members} removeMember={removeMember}
               visitors={visitors} filteredVisitors={filteredVisitors} visitorFilter={visitorFilter} setVisitorFilter={setVisitorFilter}
-              makeups={makeups} setActiveCard={setActiveCard}
+              makeups={makeups} setActiveCard={setActiveCard} toggleVerified={toggleVerified}
               newPin={newPin} setNewPin={setNewPin} changePin={changePin}
               exportCsv={exportCsv} loadAll={loadAll}
             />
@@ -528,9 +540,11 @@ export default function App() {
 
 function AdminPanel(props) {
   const { settings, settingsForm, setSettingsForm, saveSettings, buddyGroups, newGroup, setNewGroup, addGroup, removeGroup,
-    members, removeMember, visitors, filteredVisitors, visitorFilter, setVisitorFilter, makeups, setActiveCard,
+    members, removeMember, visitors, filteredVisitors, visitorFilter, setVisitorFilter, makeups, setActiveCard, toggleVerified,
     newPin, setNewPin, changePin, exportCsv, loadAll } = props;
   const [section, setSection] = useState("dashboard");
+  const [makeupFilter, setMakeupFilter] = useState("All");
+  const filteredMakeups = makeupFilter === "All" ? makeups : makeups.filter((m) => (makeupFilter === "Verified" ? m.verified : !m.verified));
   return (
     <div className="rot-panel">
       <div className="rot-subtabs">
@@ -546,6 +560,7 @@ function AdminPanel(props) {
             <div className="rot-stat"><div className="n">{buddyGroups.length}</div><div className="l">Buddy Groups</div></div>
             <div className="rot-stat"><div className="n">{visitors.length}</div><div className="l">Visitors (all-time)</div></div>
             <div className="rot-stat"><div className="n">{makeups.length}</div><div className="l">Make-Ups Logged</div></div>
+            <div className="rot-stat"><div className="n">{makeups.filter((m) => !m.verified).length}</div><div className="l">Pending Verification</div></div>
           </div>
           <button type="button" className="rot-btn ghost" onClick={loadAll}><RotateCcw size={15}/> Refresh</button>
         </>
@@ -595,10 +610,22 @@ function AdminPanel(props) {
 
       {section === "makeups" && (
         <>
-          <button type="button" className="rot-btn ghost" onClick={() => exportCsv("makeups")} style={{ marginBottom: 14 }}><Download size={15}/> Export CSV</button>
-          {makeups.length === 0 ? <div className="rot-empty">No make-ups logged yet.</div> : (
-            <div className="rot-list">{makeups.map((mk) => (
-              <div className="rot-person" key={mk.id}><div><strong>{mk.name}</strong><div className="meta">{mk.buddy_group} · {prettyDate(mk.activity_date)} · {mk.detail}</div></div><button type="button" className="rot-btn ghost" onClick={() => setActiveCard(mk)}>View card</button></div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+            {["All","Pending","Verified"].map((f) => (
+              <button key={f} type="button" className={`rot-subtab ${makeupFilter === f ? "active" : ""}`} onClick={() => setMakeupFilter(f)}>{f}</button>
+            ))}
+            <button type="button" className="rot-btn ghost" onClick={() => exportCsv("makeups")}><Download size={15}/> Export CSV</button>
+          </div>
+          {filteredMakeups.length === 0 ? <div className="rot-empty">No make-ups match this filter.</div> : (
+            <div className="rot-list">{filteredMakeups.map((mk) => (
+              <div className="rot-person" key={mk.id}>
+                <div><strong>{mk.name}</strong><div className="meta">{mk.buddy_group} · {prettyDate(mk.activity_date)} · {mk.detail}</div></div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className={`rot-badge ${mk.verified ? "rot-badge-verified" : "rot-badge-pending"}`}>{mk.verified ? "Verified" : "Pending"}</span>
+                  <button type="button" className="rot-btn ghost" onClick={() => setActiveCard(mk)}>View card</button>
+                  <button type="button" className={mk.verified ? "rot-btn ghost" : "rot-btn gold"} onClick={() => toggleVerified(mk)}>{mk.verified ? "Unverify" : "Verify"}</button>
+                </div>
+              </div>
             ))}</div>
           )}
         </>
