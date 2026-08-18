@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   UserPlus, ShieldCheck, Search, Mail, Download, CheckCircle2, Users,
   AlertCircle, Loader2, RotateCcw, QrCode, Printer, Trash2, Plus,
-  LayoutDashboard, UsersRound, ClipboardList, Settings,
+  LayoutDashboard, UsersRound, ClipboardList, Settings, X,
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
@@ -331,6 +331,9 @@ export default function App() {
         .rot-stat .l { font-size:11px; color:#5b6a86; text-transform:uppercase; letter-spacing:0.05em; }
         .rot-card-preview { display:flex; flex-direction:column; align-items:center; gap:14px; margin-top:18px; }
         .rot-card-preview canvas { width:100%; max-width:640px; border-radius:10px; box-shadow:0 10px 30px rgba(11,33,72,0.2); }
+        .rot-modal-backdrop { position:fixed; inset:0; background:rgba(11,33,72,0.55); z-index:100; display:flex; align-items:center; justify-content:center; padding:20px; overflow-y:auto; }
+        .rot-modal { position:relative; background:var(--cream); border-radius:14px; padding:24px; max-width:680px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,0.35); }
+        .rot-modal-close { position:absolute; top:12px; right:12px; background:#fff; border:1px solid var(--line); border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--azure-deep); }
         .rot-empty { text-align:center; color:#8592ad; font-size:14px; padding:24px 0; }
         .rot-notice { font-size:12.5px; color:#5b6a86; background:rgba(18,51,107,0.05); border:1px dashed var(--line); border-radius:7px; padding:10px 12px; margin-top:10px; }
         .rot-subtabs { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
@@ -370,6 +373,8 @@ export default function App() {
           .rot-qr-img { width:200px; height:200px; }
           .rot-doorsign-h { font-size:20px; }
           h4 { font-size:15px; }
+          .rot-modal { padding:16px; border-radius:10px; }
+          .rot-modal-backdrop { padding:10px; }
         }
       `}</style>
 
@@ -480,17 +485,6 @@ export default function App() {
                   </div>
                 )
               )}
-
-              {activeCard && (
-                <div className="rot-card-preview">
-                  <canvas ref={canvasRef} />
-                  <div style={{ display: "flex", gap: 10 }}>
-                    <button type="button" className="rot-btn ghost" onClick={downloadCard}><Download size={15}/> Download card</button>
-                    <button type="button" className="rot-btn" onClick={emailCard}><Mail size={15}/> Email myself</button>
-                  </div>
-                  <div className="rot-notice" style={{ maxWidth: 500, textAlign: "center" }}>"Email myself" opens your own email app addressed to <strong>{activeCard.email}</strong>. Attach the downloaded card before sending.</div>
-                </div>
-              )}
             </div>
           )}
 
@@ -534,6 +528,22 @@ export default function App() {
         </>
       )}
       {toast && <div className={`rot-toast ${toast.kind === "err" ? "err" : ""}`}>{toast.kind === "err" ? <AlertCircle size={16}/> : <CheckCircle2 size={16}/>} {toast.msg}</div>}
+
+      {activeCard && (
+        <div className="rot-modal-backdrop" onClick={() => setActiveCard(null)}>
+          <div className="rot-modal" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="rot-modal-close" onClick={() => setActiveCard(null)}><X size={18}/></button>
+            <div className="rot-card-preview">
+              <canvas ref={canvasRef} />
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+                <button type="button" className="rot-btn ghost" onClick={downloadCard}><Download size={15}/> Download card</button>
+                <button type="button" className="rot-btn" onClick={emailCard}><Mail size={15}/> Email myself</button>
+              </div>
+              <div className="rot-notice" style={{ maxWidth: 500, textAlign: "center" }}>"Email myself" opens your own email app addressed to <strong>{activeCard.email}</strong>. Attach the downloaded card before sending.</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
