@@ -106,7 +106,7 @@ function renderCard(canvas, { clubName, name, buddyGroup, detail, date, id }) {
   ctx.fillStyle = PAPER; ctx.textAlign = "center";
   ctx.font = "800 15px 'Space Grotesk', sans-serif"; ctx.fillText("ROTARY", stubX / 2, H / 2 - 64);
   ctx.font = "600 11px Inter, sans-serif"; ctx.fillText("MAKE-UP", stubX / 2, H / 2 - 47);
-  ctx.fillStyle = AMBER; ctx.font = "italic 600 14px Inter, sans-serif"; ctx.fillText("Service Above Self", stubX / 2, H / 2 + 40);
+  ctx.fillStyle = AMBER; ctx.font = "italic 700 13px Inter, sans-serif"; ctx.fillText("“SERVICE ABOVE SELF”", stubX / 2, H / 2 + 40);
   ctx.font = "600 13px Inter, sans-serif"; ctx.fillStyle = "rgba(245,246,255,0.65)";
   ctx.fillText(buddyGroup ? `${buddyGroup} Buddy Group` : "", stubX / 2, H / 2 + 68);
 
@@ -332,7 +332,8 @@ export default function App() {
         .rot-district-footer { text-align:center; padding:26px 0 6px; font-size:11px; letter-spacing:0.14em; color:rgba(245,246,255,0.35); text-transform:uppercase; position:relative; z-index:1; }
         .rot-landing-content { position:relative; z-index:1; max-width:680px; }
         .rot-landing-eyebrow { letter-spacing:0.22em; font-size:12px; font-weight:700; color:var(--amber); text-transform:uppercase; }
-        .rot-landing-title { font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:52px; line-height:1.05; margin:14px 0 10px; background:linear-gradient(100deg,#fff 20%,var(--blue) 60%,var(--coral) 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }
+        .rot-landing-title { font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:52px; line-height:1.05; margin:14px 0 4px; background:linear-gradient(100deg,#fff 20%,var(--blue) 60%,var(--coral) 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }
+        .rot-landing-tagline { color:var(--amber); font-size:13px; font-weight:700; letter-spacing:0.16em; margin:0 0 18px; }
         .rot-landing-sub { color:rgba(245,246,255,0.65); font-size:16px; max-width:480px; margin:0 auto 34px; }
         .rot-landing-ctas { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; }
         .rot-cta { flex:1; min-width:220px; max-width:260px; background:rgba(245,246,255,0.05); border:1px solid var(--line); backdrop-filter:blur(12px); border-radius:18px; padding:26px 22px; cursor:pointer; text-align:left; transition:transform .15s ease, border-color .15s ease, background .15s ease; }
@@ -353,7 +354,7 @@ export default function App() {
         .rot-home-link:hover { color:var(--paper); border-color:rgba(245,246,255,0.35); background:rgba(245,246,255,0.04); }
         .rot-eyebrow { letter-spacing:0.18em; font-size:12px; font-weight:700; color:var(--amber); text-transform:uppercase; }
         .rot-title { font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:28px; margin:6px 0 2px; }
-        .rot-sub { color:rgba(245,246,255,0.55); font-size:14px; }
+        .rot-sub { color:rgba(245,246,255,0.5); font-size:12px; font-weight:600; letter-spacing:0.14em; margin-top:2px; }
         .rot-tabs { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; background:rgba(245,246,255,0.04); border:1px solid var(--line); border-radius:16px; padding:6px; margin:0 auto; }
         .rot-tab { display:flex; align-items:center; gap:6px; padding:10px 16px; font-weight:600; font-size:13.5px; background:none; border:none; border-radius:11px; cursor:pointer; color:rgba(245,246,255,0.55); transition:background .15s, color .15s; }
         .rot-tab.active { color:var(--ink); background:linear-gradient(120deg,var(--blue),var(--coral)); }
@@ -447,7 +448,8 @@ export default function App() {
             <img className="rot-logo-top" src="/rotary-logo.png" alt="Rotary International" />
             <div className="rot-landing-eyebrow">Attendance · Make-Up Cards</div>
             <h1 className="rot-landing-title">{settings.club_name}</h1>
-            <p className="rot-landing-sub">Service Above Self. Register as a visitor, or sign in as a member to log your make-up and get your card instantly.</p>
+            <div className="rot-landing-tagline">“SERVICE ABOVE SELF”</div>
+            <p className="rot-landing-sub">Register as a visitor, or sign in as a member to log your make-up and get your card instantly.</p>
             <div className="rot-landing-ctas">
               <div className="rot-cta" onClick={() => enterApp("visitors")}>
                 <div className="rot-cta-icon blue"><UserPlus size={20} color="#fff" /></div>
@@ -474,7 +476,7 @@ export default function App() {
         <img className="rot-logo-top" style={{ height: 44 }} src="/rotary-logo.png" alt="Rotary International" />
         <div className="rot-eyebrow">Visitors · Members · Make-Up Cards</div>
         <div className="rot-title">{settings.club_name}</div>
-        <div className="rot-sub">Service Above Self</div>
+        <div className="rot-sub">“SERVICE ABOVE SELF”</div>
       </div>
 
       <div className="rot-tabs">
