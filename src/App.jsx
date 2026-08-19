@@ -32,7 +32,7 @@ function QrSvg({ text, size = 260 }) {
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} shapeRendering="crispEdges">
       <rect width={size} height={size} fill="#fff" />
-      {cells.map(([r, c], i) => <rect key={i} x={c * cell} y={r * cell} width={cell} height={cell} fill="#0B2148" />)}
+      {cells.map(([r, c], i) => <rect key={i} x={c * cell} y={r * cell} width={cell} height={cell} fill="#131A33" />)}
     </svg>
   );
 }
@@ -55,15 +55,17 @@ function csv(rows) {
   return rows.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
 }
 
-function drawGear(ctx, cx, cy, rOuter, rInner, teeth, color) {
-  ctx.save(); ctx.translate(cx, cy); ctx.fillStyle = color; ctx.beginPath();
-  for (let i = 0; i < teeth; i++) {
-    const a0 = (i / teeth) * Math.PI * 2, a1 = a0 + (Math.PI * 2) / teeth / 2;
-    ctx.arc(0, 0, rOuter, a0, a1); ctx.lineTo(Math.cos(a1) * rInner, Math.sin(a1) * rInner);
-    const a2 = a1 + (Math.PI * 2) / teeth / 2;
-    ctx.arc(0, 0, rInner, a1, a2); ctx.lineTo(Math.cos(a2) * rOuter, Math.sin(a2) * rOuter);
+function drawBurst(ctx, cx, cy, rInner, rOuter, rays, color, alpha = 1) {
+  ctx.save(); ctx.translate(cx, cy); ctx.strokeStyle = color; ctx.globalAlpha = alpha; ctx.lineCap = "round";
+  for (let i = 0; i < rays; i++) {
+    const a = (i / rays) * Math.PI * 2;
+    ctx.lineWidth = i % 4 === 0 ? 5 : 2;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * rInner, Math.sin(a) * rInner);
+    ctx.lineTo(Math.cos(a) * rOuter, Math.sin(a) * rOuter);
+    ctx.stroke();
   }
-  ctx.closePath(); ctx.fill(); ctx.restore();
+  ctx.restore();
 }
 function wrapText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 3) {
   const words = String(text).split(/\s+/); let line = "", lines = [];
@@ -80,36 +82,51 @@ function renderCard(canvas, { clubName, name, buddyGroup, detail, date, id }) {
   const W = 1050, H = 600;
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d");
-  const AZURE = "#12336B", AZURE_DEEP = "#0B2148", GOLD = "#F2A71B", CREAM = "#FBF6EC";
+  const INK = "#090C16", INK2 = "#131A33", BLUE = "#3D6BFF", CORAL = "#FF6B4A", AMBER = "#FFB020", PAPER = "#F5F6FF";
+
   const grad = ctx.createLinearGradient(0, 0, W, H);
-  grad.addColorStop(0, AZURE_DEEP); grad.addColorStop(1, AZURE);
+  grad.addColorStop(0, INK); grad.addColorStop(0.55, INK2); grad.addColorStop(1, "#1B2550");
   ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
-  ctx.globalAlpha = 0.08; drawGear(ctx, W - 150, H - 120, 220, 150, 14, CREAM); ctx.globalAlpha = 1;
-  ctx.strokeStyle = GOLD; ctx.lineWidth = 4; ctx.strokeRect(24, 24, W - 48, H - 48);
+
+  drawBurst(ctx, W - 120, H - 90, 40, 260, 40, BLUE, 0.14);
+  drawBurst(ctx, W - 120, H - 90, 40, 180, 40, CORAL, 0.10);
+
+  const borderGrad = ctx.createLinearGradient(0, 0, W, 0);
+  borderGrad.addColorStop(0, BLUE); borderGrad.addColorStop(1, CORAL);
+  ctx.strokeStyle = borderGrad; ctx.lineWidth = 5; ctx.strokeRect(20, 20, W - 40, H - 40);
+
   const stubX = 300;
-  ctx.setLineDash([2, 10]); ctx.strokeStyle = "rgba(251,246,236,0.5)"; ctx.lineWidth = 3;
+  ctx.setLineDash([2, 10]); ctx.strokeStyle = "rgba(245,246,255,0.25)"; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(stubX, 24); ctx.lineTo(stubX, H - 24); ctx.stroke(); ctx.setLineDash([]);
-  drawGear(ctx, stubX / 2, H / 2 - 50, 70, 45, 10, GOLD);
-  ctx.fillStyle = AZURE_DEEP; ctx.beginPath(); ctx.arc(stubX / 2, H / 2 - 50, 34, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = CREAM; ctx.textAlign = "center";
-  ctx.font = "700 15px Inter, sans-serif"; ctx.fillText("ROTARY", stubX / 2, H / 2 - 54);
-  ctx.font = "600 11px Inter, sans-serif"; ctx.fillText("MAKE-UP", stubX / 2, H / 2 - 37);
-  ctx.fillStyle = CREAM; ctx.font = "italic 600 15px Georgia, serif"; ctx.fillText("Service Above Self", stubX / 2, H / 2 + 50);
-  ctx.font = "600 13px Inter, sans-serif"; ctx.fillStyle = "rgba(251,246,236,0.7)";
-  ctx.fillText(buddyGroup ? `${buddyGroup} Buddy Group` : "", stubX / 2, H / 2 + 78);
+
+  const badgeGrad = ctx.createLinearGradient(0, H / 2 - 130, 0, H / 2 + 30);
+  badgeGrad.addColorStop(0, BLUE); badgeGrad.addColorStop(1, CORAL);
+  drawBurst(ctx, stubX / 2, H / 2 - 60, 20, 62, 24, AMBER, 0.9);
+  ctx.fillStyle = badgeGrad; ctx.beginPath(); ctx.arc(stubX / 2, H / 2 - 60, 38, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = PAPER; ctx.textAlign = "center";
+  ctx.font = "800 15px 'Space Grotesk', sans-serif"; ctx.fillText("ROTARY", stubX / 2, H / 2 - 64);
+  ctx.font = "600 11px Inter, sans-serif"; ctx.fillText("MAKE-UP", stubX / 2, H / 2 - 47);
+  ctx.fillStyle = AMBER; ctx.font = "italic 600 14px Inter, sans-serif"; ctx.fillText("Service Above Self", stubX / 2, H / 2 + 40);
+  ctx.font = "600 13px Inter, sans-serif"; ctx.fillStyle = "rgba(245,246,255,0.65)";
+  ctx.fillText(buddyGroup ? `${buddyGroup} Buddy Group` : "", stubX / 2, H / 2 + 68);
+
   const padX = stubX + 60;
   ctx.textAlign = "left";
-  ctx.fillStyle = GOLD; ctx.font = "700 18px Inter, sans-serif"; ctx.fillText(clubName.toUpperCase(), padX, 100);
-  ctx.fillStyle = CREAM; ctx.font = "700 46px Georgia, serif"; ctx.fillText("Make-Up Card", padX, 160);
-  ctx.strokeStyle = "rgba(242,167,27,0.6)"; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(padX, 185); ctx.lineTo(W - 60, 185); ctx.stroke();
-  ctx.fillStyle = "rgba(251,246,236,0.7)"; ctx.font = "600 14px Inter, sans-serif"; ctx.fillText("ISSUED TO", padX, 230);
-  ctx.fillStyle = CREAM; ctx.font = "700 34px Inter, sans-serif"; ctx.fillText(name, padX, 270);
-  ctx.fillStyle = "rgba(251,246,236,0.7)"; ctx.font = "600 14px Inter, sans-serif"; ctx.fillText("ACTIVITY / MAKE-UP DETAIL", padX, 325);
-  ctx.fillStyle = CREAM; ctx.font = "500 21px Inter, sans-serif"; wrapText(ctx, detail || "—", padX, 353, W - padX - 60, 27, 3);
-  ctx.fillStyle = "rgba(251,246,236,0.7)"; ctx.font = "600 14px Inter, sans-serif"; ctx.fillText("DATE", padX, 460);
-  ctx.fillStyle = CREAM; ctx.font = "600 20px Inter, sans-serif"; ctx.fillText(prettyDate(date), padX, 486);
-  ctx.fillStyle = "rgba(251,246,236,0.55)"; ctx.font = "500 13px monospace";
+  ctx.fillStyle = CORAL; ctx.font = "800 16px 'Space Grotesk', sans-serif"; ctx.fillText(clubName.toUpperCase(), padX, 96);
+  ctx.fillStyle = PAPER; ctx.font = "800 46px 'Space Grotesk', sans-serif"; ctx.fillText("Make-Up Card", padX, 158);
+  const lineGrad = ctx.createLinearGradient(padX, 0, W - 60, 0);
+  lineGrad.addColorStop(0, BLUE); lineGrad.addColorStop(1, CORAL);
+  ctx.strokeStyle = lineGrad; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(padX, 182); ctx.lineTo(W - 60, 182); ctx.stroke();
+
+  ctx.fillStyle = "rgba(245,246,255,0.55)"; ctx.font = "700 13px Inter, sans-serif"; ctx.fillText("ISSUED TO", padX, 228);
+  ctx.fillStyle = PAPER; ctx.font = "700 34px 'Space Grotesk', sans-serif"; ctx.fillText(name, padX, 268);
+  ctx.fillStyle = "rgba(245,246,255,0.55)"; ctx.font = "700 13px Inter, sans-serif"; ctx.fillText("ACTIVITY / MAKE-UP DETAIL", padX, 323);
+  ctx.fillStyle = PAPER; ctx.font = "500 21px Inter, sans-serif"; wrapText(ctx, detail || "—", padX, 351, W - padX - 60, 27, 3);
+  ctx.fillStyle = "rgba(245,246,255,0.55)"; ctx.font = "700 13px Inter, sans-serif"; ctx.fillText("DATE", padX, 458);
+  ctx.fillStyle = PAPER; ctx.font = "600 20px Inter, sans-serif"; ctx.fillText(prettyDate(date), padX, 484);
+
+  ctx.fillStyle = "rgba(245,246,255,0.4)"; ctx.font = "500 13px 'JetBrains Mono', monospace";
   ctx.fillText(`CARD ID  ${id}`, padX, H - 55); ctx.fillText("Valid as proof of make-up attendance", padX, H - 34);
 }
 
@@ -117,6 +134,8 @@ function renderCard(canvas, { clubName, name, buddyGroup, detail, date, id }) {
 export default function App() {
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState("members");
+  const [view, setView] = useState("landing"); // "landing" | "app"
+  const enterApp = (t) => { setTab(t); setView("app"); };
   const [toast, setToast] = useState(null);
   const flash = (msg, kind = "ok") => { setToast({ msg, kind }); setTimeout(() => setToast(null), 3200); };
 
@@ -294,67 +313,106 @@ export default function App() {
   return (
     <div className="rot-wrap">
       <style>{`
-        .rot-wrap { --azure:#12336B; --azure-deep:#0B2148; --gold:#F2A71B; --cream:#FBF6EC; --line:rgba(11,33,72,0.12);
-          font-family:'Inter',system-ui,sans-serif; background:var(--cream); color:var(--azure-deep); min-height:100vh; padding:28px 20px 40px; box-sizing:border-box; }
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
+        .rot-wrap {
+          --ink:#090C16; --ink2:#131A33; --deep:#1B2550; --blue:#3D6BFF; --coral:#FF6B4A; --amber:#FFB020;
+          --paper:#F5F6FF; --line:rgba(245,246,255,0.12); --panel:#12162A;
+          font-family:'Inter',system-ui,sans-serif; color:var(--paper);
+          background:radial-gradient(circle at 15% -10%, #24306b 0%, transparent 45%), radial-gradient(circle at 100% 0%, #3a1f4a 0%, transparent 40%), linear-gradient(180deg, var(--ink) 0%, #0D1226 60%, var(--ink) 100%);
+          min-height:100vh; box-sizing:border-box;
+        }
         .rot-wrap * { box-sizing:border-box; }
-        .rot-header { max-width:920px; margin:0 auto 22px; text-align:center; }
-        .rot-eyebrow { letter-spacing:0.18em; font-size:12px; font-weight:700; color:var(--gold); text-transform:uppercase; }
-        .rot-title { font-family:Georgia,serif; font-weight:700; font-size:32px; margin:4px 0 2px; }
-        .rot-sub { font-style:italic; color:#4b5a78; font-size:15px; }
-        .rot-tabs { max-width:920px; margin:22px auto 0; display:flex; gap:6px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
-        .rot-tab { display:flex; align-items:center; gap:6px; padding:10px 14px; font-weight:600; font-size:14px; background:none; border:none; cursor:pointer; color:#5b6a86; border-bottom:2px solid transparent; margin-bottom:-1px; }
-        .rot-tab.active { color:var(--azure); border-bottom-color:var(--gold); }
-        .rot-panel { max-width:920px; margin:24px auto 0; background:#fff; border:1px solid var(--line); border-radius:10px; padding:26px; }
+        .rot-heading-font { font-family:'Space Grotesk', sans-serif; }
+
+        /* ---- Landing screen ---- */
+        .rot-landing { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 20px; position:relative; overflow:hidden; text-align:center; }
+        .rot-landing-glow { position:absolute; width:900px; height:900px; border-radius:50%; background:radial-gradient(circle, rgba(61,107,255,0.28) 0%, transparent 65%); top:-380px; left:50%; transform:translateX(-50%); pointer-events:none; }
+        .rot-landing-content { position:relative; z-index:1; max-width:680px; }
+        .rot-landing-eyebrow { letter-spacing:0.22em; font-size:12px; font-weight:700; color:var(--amber); text-transform:uppercase; }
+        .rot-landing-title { font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:52px; line-height:1.05; margin:14px 0 10px; background:linear-gradient(100deg,#fff 20%,var(--blue) 60%,var(--coral) 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }
+        .rot-landing-sub { color:rgba(245,246,255,0.65); font-size:16px; max-width:480px; margin:0 auto 34px; }
+        .rot-landing-ctas { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; }
+        .rot-cta { flex:1; min-width:220px; max-width:260px; background:rgba(245,246,255,0.05); border:1px solid var(--line); backdrop-filter:blur(12px); border-radius:18px; padding:26px 22px; cursor:pointer; text-align:left; transition:transform .15s ease, border-color .15s ease, background .15s ease; }
+        .rot-cta:hover { transform:translateY(-4px); border-color:rgba(245,246,255,0.3); background:rgba(245,246,255,0.08); }
+        .rot-cta-icon { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; margin-bottom:14px; }
+        .rot-cta-icon.blue { background:linear-gradient(135deg,var(--blue),#6f8fff); }
+        .rot-cta-icon.coral { background:linear-gradient(135deg,var(--coral),var(--amber)); }
+        .rot-cta h3 { font-family:'Space Grotesk',sans-serif; font-size:19px; margin:0 0 6px; }
+        .rot-cta p { font-size:13.5px; color:rgba(245,246,255,0.6); margin:0; line-height:1.4; }
+        .rot-landing-foot { margin-top:36px; display:flex; gap:18px; font-size:13px; color:rgba(245,246,255,0.45); }
+        .rot-landing-foot button { background:none; border:none; color:rgba(245,246,255,0.55); cursor:pointer; font:inherit; text-decoration:underline; text-underline-offset:3px; }
+        .rot-landing-foot button:hover { color:var(--paper); }
+
+        /* ---- App shell ---- */
+        .rot-app { padding:24px 20px 40px; max-width:960px; margin:0 auto; }
+        .rot-header { text-align:center; margin-bottom:18px; position:relative; }
+        .rot-home-link { position:absolute; left:0; top:4px; background:none; border:none; color:rgba(245,246,255,0.5); font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; }
+        .rot-home-link:hover { color:var(--paper); }
+        .rot-eyebrow { letter-spacing:0.18em; font-size:12px; font-weight:700; color:var(--amber); text-transform:uppercase; }
+        .rot-title { font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:28px; margin:6px 0 2px; }
+        .rot-sub { color:rgba(245,246,255,0.55); font-size:14px; }
+        .rot-tabs { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; background:rgba(245,246,255,0.04); border:1px solid var(--line); border-radius:16px; padding:6px; margin:0 auto; }
+        .rot-tab { display:flex; align-items:center; gap:6px; padding:10px 16px; font-weight:600; font-size:13.5px; background:none; border:none; border-radius:11px; cursor:pointer; color:rgba(245,246,255,0.55); transition:background .15s, color .15s; }
+        .rot-tab.active { color:var(--ink); background:linear-gradient(120deg,var(--blue),var(--coral)); }
+        .rot-panel { max-width:920px; margin:22px auto 0; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:26px; box-shadow:0 20px 50px rgba(0,0,0,0.25); }
         .rot-field { margin-bottom:14px; }
-        .rot-field label { display:block; font-size:12px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:#5b6a86; margin-bottom:6px; }
-        .rot-field input, .rot-field select, .rot-field textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:6px; font-size:15px; font-family:inherit; color:var(--azure-deep); }
+        .rot-field label { display:block; font-size:12px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:rgba(245,246,255,0.5); margin-bottom:6px; }
+        .rot-field input, .rot-field select, .rot-field textarea { width:100%; padding:11px 13px; border:1px solid var(--line); background:rgba(245,246,255,0.04); border-radius:9px; font-size:15px; font-family:inherit; color:var(--paper); }
+        .rot-field input::placeholder, .rot-field textarea::placeholder { color:rgba(245,246,255,0.3); }
+        .rot-field input:focus, .rot-field select:focus, .rot-field textarea:focus { outline:2px solid var(--blue); outline-offset:1px; }
         .rot-row { display:flex; gap:14px; flex-wrap:wrap; }
         .rot-row > * { flex:1; min-width:180px; }
         .rot-radios { display:flex; gap:16px; }
-        .rot-radios label { display:flex; align-items:center; gap:6px; font-weight:600; font-size:14px; color:var(--azure-deep); }
-        .rot-btn { display:inline-flex; align-items:center; gap:8px; justify-content:center; background:var(--azure); color:#fff; border:none; border-radius:7px; padding:11px 18px; font-weight:600; font-size:14px; cursor:pointer; }
-        .rot-btn:disabled { opacity:0.6; cursor:default; }
-        .rot-btn.gold { background:var(--gold); color:var(--azure-deep); }
-        .rot-btn.ghost { background:none; color:var(--azure); border:1px solid var(--line); }
-        .rot-btn.danger { background:none; color:#A6192E; border:1px solid rgba(166,25,46,0.3); }
+        .rot-radios label { display:flex; align-items:center; gap:6px; font-weight:600; font-size:14px; color:var(--paper); }
+        .rot-btn { display:inline-flex; align-items:center; gap:8px; justify-content:center; background:linear-gradient(120deg,var(--blue),#5b82ff); color:#fff; border:none; border-radius:10px; padding:11px 18px; font-weight:700; font-size:14px; cursor:pointer; transition:filter .15s, transform .1s; }
+        .rot-btn:hover { filter:brightness(1.1); }
+        .rot-btn:active { transform:scale(0.98); }
+        .rot-btn:disabled { opacity:0.5; cursor:default; }
+        .rot-btn.gold { background:linear-gradient(120deg,var(--coral),var(--amber)); color:var(--ink); }
+        .rot-btn.ghost { background:none; color:var(--paper); border:1px solid var(--line); }
+        .rot-btn.danger { background:none; color:#FF7B72; border:1px solid rgba(255,123,114,0.3); }
         .rot-list { margin-top:14px; display:flex; flex-direction:column; gap:8px; }
-        .rot-person { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border:1px solid var(--line); border-radius:7px; gap:10px; }
-        .rot-person .meta { font-size:13px; color:#5b6a86; }
-        .rot-badge { font-size:12px; font-weight:700; color:var(--gold); background:rgba(242,167,27,0.12); padding:3px 8px; border-radius:20px; white-space:nowrap; }
-        .rot-badge-verified { color:#1B7A3D; background:rgba(27,122,61,0.12); }
-        .rot-badge-pending { color:#A6192E; background:rgba(166,25,46,0.1); }
-        .rot-toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); padding:10px 18px; border-radius:8px; font-size:14px; font-weight:600; background:var(--azure-deep); color:#fff; z-index:50; display:flex; gap:8px; align-items:center; }
-        .rot-toast.err { background:#7A1F2B; }
+        .rot-person { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border:1px solid var(--line); border-radius:11px; gap:10px; background:rgba(245,246,255,0.02); }
+        .rot-person .meta { font-size:13px; color:rgba(245,246,255,0.5); }
+        .rot-badge { font-size:12px; font-weight:700; color:var(--amber); background:rgba(255,176,32,0.14); padding:3px 8px; border-radius:20px; white-space:nowrap; }
+        .rot-badge-verified { color:#3DDC91; background:rgba(61,220,145,0.14); }
+        .rot-badge-pending { color:#FF7B72; background:rgba(255,123,114,0.12); }
+        .rot-toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); padding:10px 18px; border-radius:10px; font-size:14px; font-weight:600; background:var(--ink2); border:1px solid var(--line); color:#fff; z-index:200; display:flex; gap:8px; align-items:center; box-shadow:0 10px 30px rgba(0,0,0,0.4); }
+        .rot-toast.err { border-color:rgba(255,123,114,0.4); }
         .rot-stats { display:flex; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
-        .rot-stat { flex:1; min-width:120px; border:1px solid var(--line); border-radius:8px; padding:16px; text-align:center; }
-        .rot-stat .n { font-family:Georgia,serif; font-size:28px; font-weight:700; color:var(--azure); }
-        .rot-stat .l { font-size:11px; color:#5b6a86; text-transform:uppercase; letter-spacing:0.05em; }
+        .rot-stat { flex:1; min-width:120px; border:1px solid var(--line); border-radius:12px; padding:16px; text-align:center; background:rgba(245,246,255,0.02); }
+        .rot-stat .n { font-family:'Space Grotesk',sans-serif; font-size:28px; font-weight:800; background:linear-gradient(120deg,var(--blue),var(--coral)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+        .rot-stat .l { font-size:11px; color:rgba(245,246,255,0.5); text-transform:uppercase; letter-spacing:0.05em; }
         .rot-card-preview { display:flex; flex-direction:column; align-items:center; gap:14px; margin-top:18px; }
-        .rot-card-preview canvas { width:100%; max-width:640px; border-radius:10px; box-shadow:0 10px 30px rgba(11,33,72,0.2); }
-        .rot-modal-backdrop { position:fixed; inset:0; background:rgba(11,33,72,0.55); z-index:100; display:flex; align-items:center; justify-content:center; padding:20px; overflow-y:auto; }
-        .rot-modal { position:relative; background:var(--cream); border-radius:14px; padding:24px; max-width:680px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,0.35); }
-        .rot-modal-close { position:absolute; top:12px; right:12px; background:#fff; border:1px solid var(--line); border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--azure-deep); }
-        .rot-empty { text-align:center; color:#8592ad; font-size:14px; padding:24px 0; }
-        .rot-notice { font-size:12.5px; color:#5b6a86; background:rgba(18,51,107,0.05); border:1px dashed var(--line); border-radius:7px; padding:10px 12px; margin-top:10px; }
+        .rot-card-preview canvas { width:100%; max-width:640px; border-radius:14px; box-shadow:0 20px 50px rgba(0,0,0,0.45); }
+        .rot-modal-backdrop { position:fixed; inset:0; background:rgba(5,7,16,0.75); backdrop-filter:blur(4px); z-index:100; display:flex; align-items:center; justify-content:center; padding:20px; overflow-y:auto; }
+        .rot-modal { position:relative; background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:24px; max-width:680px; width:100%; box-shadow:0 30px 80px rgba(0,0,0,0.5); }
+        .rot-modal-close { position:absolute; top:12px; right:12px; background:rgba(245,246,255,0.08); border:1px solid var(--line); border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--paper); }
+        .rot-empty { text-align:center; color:rgba(245,246,255,0.4); font-size:14px; padding:24px 0; }
+        .rot-notice { font-size:12.5px; color:rgba(245,246,255,0.55); background:rgba(61,107,255,0.08); border:1px dashed var(--line); border-radius:9px; padding:10px 12px; margin-top:10px; }
         .rot-subtabs { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
-        .rot-subtab { padding:7px 14px; border-radius:20px; border:1px solid var(--line); background:#fff; font-size:13px; font-weight:600; cursor:pointer; color:#5b6a86; }
-        .rot-subtab.active { background:var(--azure); color:#fff; border-color:var(--azure); }
+        .rot-subtab { padding:7px 14px; border-radius:20px; border:1px solid var(--line); background:rgba(245,246,255,0.03); font-size:13px; font-weight:600; cursor:pointer; color:rgba(245,246,255,0.6); }
+        .rot-subtab.active { background:linear-gradient(120deg,var(--blue),var(--coral)); color:var(--ink); border-color:transparent; }
         .rot-doorsign { display:flex; flex-direction:column; align-items:center; gap:10px; padding:40px 26px; }
-        .rot-doorsign-h { font-family:Georgia,serif; font-size:26px; margin:4px 0 10px; text-align:center; }
-        .rot-qr-img { width:260px; height:260px; border:6px solid var(--azure-deep); border-radius:12px; padding:10px; background:#fff; }
-        .rot-doorsign-sub { font-style:italic; color:#5b6a86; margin-bottom:6px; }
-        @media print { .rot-tabs,.rot-notice,.rot-btn { display:none !important; } .rot-qr-img { width:320px; height:320px; } }
+        .rot-doorsign-h { font-family:'Space Grotesk',sans-serif; font-size:24px; margin:4px 0 10px; text-align:center; }
+        .rot-qr-img { width:260px; height:260px; border:1px solid var(--line); border-radius:14px; padding:10px; background:#fff; }
+        .rot-doorsign-sub { color:rgba(245,246,255,0.55); margin-bottom:6px; }
+        @media print { .rot-tabs,.rot-notice,.rot-btn,.rot-home-link { display:none !important; } .rot-qr-img { width:320px; height:320px; } }
 
         /* ---- Mobile layout ---- */
         @media (max-width: 640px) {
-          .rot-wrap { padding:16px 12px 28px; }
-          .rot-title { font-size:24px; }
+          .rot-landing-title { font-size:34px; }
+          .rot-landing-sub { font-size:14px; }
+          .rot-cta { min-width:100%; }
+          .rot-app { padding:16px 12px 28px; }
+          .rot-title { font-size:22px; }
           .rot-eyebrow { font-size:10px; letter-spacing:0.12em; }
           .rot-sub { font-size:13px; }
-          .rot-tabs { gap:2px; overflow-x:auto; flex-wrap:nowrap; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+          .rot-home-link { position:static; margin-bottom:10px; justify-content:center; }
+          .rot-tabs { gap:2px; overflow-x:auto; flex-wrap:nowrap; -webkit-overflow-scrolling:touch; scrollbar-width:none; justify-content:flex-start; }
           .rot-tabs::-webkit-scrollbar { display:none; }
           .rot-tab { padding:10px 10px; font-size:13px; white-space:nowrap; flex:0 0 auto; }
-          .rot-panel { padding:16px; margin-top:16px; border-radius:8px; }
+          .rot-panel { padding:16px; margin-top:16px; border-radius:12px; }
           .rot-row { flex-direction:column; gap:0; }
           .rot-row > * { min-width:100%; }
           .rot-radios { flex-wrap:wrap; gap:12px; }
@@ -373,12 +431,40 @@ export default function App() {
           .rot-qr-img { width:200px; height:200px; }
           .rot-doorsign-h { font-size:20px; }
           h4 { font-size:15px; }
-          .rot-modal { padding:16px; border-radius:10px; }
+          .rot-modal { padding:16px; border-radius:12px; }
           .rot-modal-backdrop { padding:10px; }
         }
       `}</style>
 
+      {view === "landing" ? (
+        <div className="rot-landing">
+          <div className="rot-landing-glow" />
+          <div className="rot-landing-content">
+            <div className="rot-landing-eyebrow">Attendance · Make-Up Cards</div>
+            <h1 className="rot-landing-title">{settings.club_name}</h1>
+            <p className="rot-landing-sub">Service Above Self. Register as a visitor, or sign in as a member to log your make-up and get your card instantly.</p>
+            <div className="rot-landing-ctas">
+              <div className="rot-cta" onClick={() => enterApp("visitors")}>
+                <div className="rot-cta-icon blue"><UserPlus size={20} color="#fff" /></div>
+                <h3>I'm a Visitor</h3>
+                <p>Register your name, home club, and whether you're a Rotarian, Rotaractor, or guest.</p>
+              </div>
+              <div className="rot-cta" onClick={() => enterApp("members")}>
+                <div className="rot-cta-icon coral"><UsersRound size={20} color="#090C16" /></div>
+                <h3>I'm a Member</h3>
+                <p>Find your name, log a make-up, and get your card instantly.</p>
+              </div>
+            </div>
+            <div className="rot-landing-foot">
+              <button type="button" onClick={() => enterApp("qr")}>Scan code</button>
+              <button type="button" onClick={() => enterApp("admin")}>Admin</button>
+            </div>
+          </div>
+        </div>
+      ) : (
+      <div className="rot-app">
       <div className="rot-header">
+        <button type="button" className="rot-home-link" onClick={() => setView("landing")}>← Home</button>
         <div className="rot-eyebrow">Visitors · Members · Make-Up Cards</div>
         <div className="rot-title">{settings.club_name}</div>
         <div className="rot-sub">Service Above Self</div>
@@ -397,7 +483,7 @@ export default function App() {
         <>
           {tab === "visitors" && (
             <div className="rot-panel">
-              <p style={{ marginTop: 0, color: "#5b6a86", fontSize: 14 }}>Not a member of {settings.club_name}? Register here as a visitor — this is open to anyone.</p>
+              <p style={{ marginTop: 0, color: "rgba(245,246,255,0.55)", fontSize: 14 }}>Not a member of {settings.club_name}? Register here as a visitor — this is open to anyone.</p>
               <div className="rot-field"><label>Full name</label><input value={visForm.name} onChange={(e) => setVisForm({ ...visForm, name: e.target.value })} placeholder="e.g. Grace Nabatanzi" /></div>
               <div className="rot-row">
                 <div className="rot-field"><label>Your club</label><input value={visForm.club} onChange={(e) => setVisForm({ ...visForm, club: e.target.value })} placeholder="e.g. Rotary Club of Entebbe" /></div>
@@ -421,7 +507,7 @@ export default function App() {
               <div className="rot-field">
                 <label>Type your name</label>
                 <div style={{ position: "relative" }}>
-                  <Search size={16} style={{ position: "absolute", left: 12, top: 13, color: "#8592ad" }} />
+                  <Search size={16} style={{ position: "absolute", left: 12, top: 13, color: "rgba(245,246,255,0.35)" }} />
                   <input style={{ paddingLeft: 34 }} value={memberQuery} onChange={(e) => setMemberQuery(e.target.value)} placeholder="Start typing your name…" />
                 </div>
                 {memberSuggestions.length > 0 && (
@@ -509,7 +595,7 @@ export default function App() {
               <div className="rot-field"><label>Admin PIN</label>
                 <input type="text" inputMode="numeric" autoComplete="off" value={pinInput} onChange={(e) => setPinInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && tryUnlock()} placeholder="e.g. 1905" autoFocus />
               </div>
-              {pinError && <div className="rot-notice" style={{ color: "#7A1F2B", borderColor: "#7A1F2B" }}>{pinError}</div>}
+              {pinError && <div className="rot-notice" style={{ color: "#FF7B72", borderColor: "rgba(255,123,114,0.4)" }}>{pinError}</div>}
               <button type="button" className="rot-btn rot-btn-block" style={{ marginTop: 10 }} onClick={tryUnlock}><ShieldCheck size={15}/> Unlock admin</button>
             </div>
           )}
@@ -526,6 +612,8 @@ export default function App() {
             />
           )}
         </>
+      )}
+      </div>
       )}
       {toast && <div className={`rot-toast ${toast.kind === "err" ? "err" : ""}`}>{toast.kind === "err" ? <AlertCircle size={16}/> : <CheckCircle2 size={16}/>} {toast.msg}</div>}
 
