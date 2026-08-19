@@ -342,15 +342,15 @@ export default function App() {
         .rot-cta-icon.coral { background:linear-gradient(135deg,var(--coral),var(--amber)); }
         .rot-cta h3 { font-family:'Space Grotesk',sans-serif; font-size:19px; margin:0 0 6px; }
         .rot-cta p { font-size:13.5px; color:rgba(245,246,255,0.6); margin:0; line-height:1.4; }
-        .rot-landing-foot { margin-top:36px; display:flex; gap:18px; font-size:13px; color:rgba(245,246,255,0.45); }
-        .rot-landing-foot button { background:none; border:none; color:rgba(245,246,255,0.55); cursor:pointer; font:inherit; text-decoration:underline; text-underline-offset:3px; }
-        .rot-landing-foot button:hover { color:var(--paper); }
+        .rot-landing-foot { margin-top:36px; display:flex; gap:14px; font-size:13px; justify-content:center; }
+        .rot-landing-foot button { background:none; border:1px solid var(--line); color:rgba(245,246,255,0.6); cursor:pointer; font:inherit; padding:9px 18px; border-radius:20px; transition:border-color .15s, color .15s, background .15s; }
+        .rot-landing-foot button:hover { color:var(--paper); border-color:rgba(245,246,255,0.35); background:rgba(245,246,255,0.04); }
 
         /* ---- App shell ---- */
         .rot-app { padding:24px 20px 40px; max-width:960px; margin:0 auto; }
-        .rot-header { text-align:center; margin-bottom:18px; position:relative; }
-        .rot-home-link { position:absolute; left:0; top:4px; background:none; border:none; color:rgba(245,246,255,0.5); font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; }
-        .rot-home-link:hover { color:var(--paper); }
+        .rot-header { text-align:center; margin-bottom:18px; padding-top:44px; position:relative; }
+        .rot-home-link { position:absolute; left:0; top:0; background:none; border:1px solid var(--line); color:rgba(245,246,255,0.6); font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; padding:8px 14px; border-radius:20px; transition:border-color .15s, color .15s, background .15s; }
+        .rot-home-link:hover { color:var(--paper); border-color:rgba(245,246,255,0.35); background:rgba(245,246,255,0.04); }
         .rot-eyebrow { letter-spacing:0.18em; font-size:12px; font-weight:700; color:var(--amber); text-transform:uppercase; }
         .rot-title { font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:28px; margin:6px 0 2px; }
         .rot-sub { color:rgba(245,246,255,0.55); font-size:14px; }
