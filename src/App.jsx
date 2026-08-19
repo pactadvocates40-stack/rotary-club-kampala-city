@@ -327,6 +327,9 @@ export default function App() {
         /* ---- Landing screen ---- */
         .rot-landing { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 20px; position:relative; overflow:hidden; text-align:center; }
         .rot-landing-glow { position:absolute; width:900px; height:900px; border-radius:50%; background:radial-gradient(circle, rgba(61,107,255,0.28) 0%, transparent 65%); top:-380px; left:50%; transform:translateX(-50%); pointer-events:none; }
+        .rot-bg-logo { position:absolute; width:900px; max-width:none; top:50%; left:50%; transform:translate(-50%,-50%); opacity:0.06; pointer-events:none; filter:grayscale(1) brightness(2); }
+        .rot-logo-top { display:block; margin:0 auto 16px; height:64px; width:auto; }
+        .rot-district-footer { text-align:center; padding:26px 0 6px; font-size:11px; letter-spacing:0.14em; color:rgba(245,246,255,0.35); text-transform:uppercase; position:relative; z-index:1; }
         .rot-landing-content { position:relative; z-index:1; max-width:680px; }
         .rot-landing-eyebrow { letter-spacing:0.22em; font-size:12px; font-weight:700; color:var(--amber); text-transform:uppercase; }
         .rot-landing-title { font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:52px; line-height:1.05; margin:14px 0 10px; background:linear-gradient(100deg,#fff 20%,var(--blue) 60%,var(--coral) 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }
@@ -438,8 +441,10 @@ export default function App() {
 
       {view === "landing" ? (
         <div className="rot-landing">
+          <img className="rot-bg-logo" src="/rotary-logo.png" alt="" aria-hidden="true" />
           <div className="rot-landing-glow" />
           <div className="rot-landing-content">
+            <img className="rot-logo-top" src="/rotary-logo.png" alt="Rotary International" />
             <div className="rot-landing-eyebrow">Attendance · Make-Up Cards</div>
             <h1 className="rot-landing-title">{settings.club_name}</h1>
             <p className="rot-landing-sub">Service Above Self. Register as a visitor, or sign in as a member to log your make-up and get your card instantly.</p>
@@ -460,11 +465,13 @@ export default function App() {
               <button type="button" onClick={() => enterApp("admin")}>Admin</button>
             </div>
           </div>
+          <div className="rot-district-footer">District 9213</div>
         </div>
       ) : (
       <div className="rot-app">
       <div className="rot-header">
         <button type="button" className="rot-home-link" onClick={() => setView("landing")}>← Home</button>
+        <img className="rot-logo-top" style={{ height: 44 }} src="/rotary-logo.png" alt="Rotary International" />
         <div className="rot-eyebrow">Visitors · Members · Make-Up Cards</div>
         <div className="rot-title">{settings.club_name}</div>
         <div className="rot-sub">Service Above Self</div>
@@ -613,6 +620,7 @@ export default function App() {
           )}
         </>
       )}
+      <div className="rot-district-footer">District 9213</div>
       </div>
       )}
       {toast && <div className={`rot-toast ${toast.kind === "err" ? "err" : ""}`}>{toast.kind === "err" ? <AlertCircle size={16}/> : <CheckCircle2 size={16}/>} {toast.msg}</div>}
