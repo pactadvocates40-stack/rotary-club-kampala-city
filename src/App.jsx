@@ -398,6 +398,7 @@ export default function App() {
         .rot-modal { position:relative; background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:24px; max-width:680px; width:100%; box-shadow:0 30px 80px rgba(0,0,0,0.5); }
         .rot-modal-close { position:absolute; top:12px; right:12px; background:rgba(245,246,255,0.08); border:1px solid var(--line); border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--paper); }
         .rot-empty { text-align:center; color:rgba(245,246,255,0.4); font-size:14px; padding:24px 0; }
+        .rot-makeup-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
         .rot-card-lookup { margin-top:18px; padding-top:18px; border-top:1px dashed var(--line); }
         .rot-card-lookup-toggle { background:none; border:none; color:var(--amber); font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:7px; padding:0; }
         .rot-card-lookup-toggle:hover { color:var(--paper); }
@@ -437,6 +438,8 @@ export default function App() {
           .rot-subtab { padding:6px 12px; font-size:12px; white-space:nowrap; flex:0 0 auto; }
           .rot-person { flex-direction:column; align-items:flex-start; gap:8px; }
           .rot-person > button { width:100%; }
+          .rot-makeup-actions { flex-direction:column; align-items:stretch; width:100%; }
+          .rot-makeup-actions button { width:100%; }
           .rot-card-preview { gap:10px; }
           .rot-card-preview > div { display:flex; flex-direction:column; width:100%; gap:8px; }
           .rot-card-preview > div > button { width:100%; }
@@ -744,7 +747,7 @@ function AdminPanel(props) {
             <div className="rot-list">{filteredMakeups.map((mk) => (
               <div className="rot-person" key={mk.id}>
                 <div><strong>{mk.name}</strong><div className="meta">Visiting from {mk.buddy_group} · {prettyDate(mk.activity_date)} · {mk.detail}</div></div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div className="rot-makeup-actions">
                   <span className={`rot-badge ${mk.verified ? "rot-badge-verified" : "rot-badge-pending"}`}>{mk.verified ? "Verified" : "Pending"}</span>
                   <button type="button" className="rot-btn ghost" onClick={() => setActiveCard(mk)}>View card</button>
                   <button type="button" className={mk.verified ? "rot-btn ghost" : "rot-btn gold"} onClick={() => toggleVerified(mk)}>{mk.verified ? "Unverify" : "Verify"}</button>
