@@ -371,8 +371,10 @@ export default function App() {
         .rot-field input:focus, .rot-field select:focus, .rot-field textarea:focus { outline:2px solid var(--blue); outline-offset:1px; }
         .rot-row { display:flex; gap:14px; flex-wrap:wrap; }
         .rot-row > * { flex:1; min-width:180px; }
-        .rot-radios { display:flex; gap:16px; }
-        .rot-radios label { display:flex; align-items:center; gap:6px; font-weight:600; font-size:14px; color:var(--paper); }
+        .rot-category-picker { display:flex; gap:10px; flex-wrap:wrap; }
+        .rot-category-btn { flex:1; min-width:100px; background:rgba(245,246,255,0.04); border:1px solid var(--line); color:rgba(245,246,255,0.7); font:inherit; font-weight:600; font-size:14px; padding:11px 14px; border-radius:10px; cursor:pointer; text-align:center; transition:border-color .15s, background .15s, color .15s; }
+        .rot-category-btn:hover { border-color:rgba(245,246,255,0.3); }
+        .rot-category-btn.active { background:linear-gradient(120deg,var(--blue),var(--coral)); border-color:transparent; color:var(--ink); }
         .rot-btn { display:inline-flex; align-items:center; gap:8px; justify-content:center; background:linear-gradient(120deg,var(--blue),#5b82ff); color:#fff; border:none; border-radius:10px; padding:11px 18px; font-weight:700; font-size:14px; cursor:pointer; transition:filter .15s, transform .1s; }
         .rot-btn:hover { filter:brightness(1.1); }
         .rot-btn:active { transform:scale(0.98); }
@@ -428,7 +430,7 @@ export default function App() {
           .rot-panel { padding:16px; margin-top:16px; border-radius:12px; }
           .rot-row { flex-direction:column; gap:0; }
           .rot-row > * { min-width:100%; }
-          .rot-radios { flex-wrap:wrap; gap:12px; }
+          .rot-category-btn { min-width:100%; }
           .rot-btn { padding:13px 16px; font-size:15px; }
           .rot-btn-block, .rot-card-preview button { width:100%; }
           .rot-stats { gap:10px; }
@@ -511,9 +513,16 @@ export default function App() {
               </div>
               <div className="rot-field">
                 <label>You are a</label>
-                <div className="rot-radios">
+                <div className="rot-category-picker">
                   {["Rotarian","Rotaract","Guest"].map((c) => (
-                    <label key={c}><input type="radio" name="cat" checked={visForm.category === c} onChange={() => setVisForm({ ...visForm, category: c })} />{c}</label>
+                    <button
+                      type="button"
+                      key={c}
+                      className={`rot-category-btn ${visForm.category === c ? "active" : ""}`}
+                      onClick={() => setVisForm({ ...visForm, category: c })}
+                    >
+                      {c}
+                    </button>
                   ))}
                 </div>
                 {(visForm.category === "Rotarian" || visForm.category === "Rotaract") && (
