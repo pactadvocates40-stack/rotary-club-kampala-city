@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   UserPlus, ShieldCheck, Search, Mail, Download, CheckCircle2, Users,
   AlertCircle, Loader2, RotateCcw, QrCode, Printer, Trash2, Plus,
   LayoutDashboard, UsersRound, ClipboardList, Settings, X,
+  Trophy, Calendar, Award, Check, UserCheck, TrendingUp, Sparkles,
+  BarChart3, Clock, ChevronRight
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
@@ -151,24 +153,27 @@ export default function App() {
   const [members, setMembers] = useState([]);
   const [visitors, setVisitors] = useState([]);
   const [makeups, setMakeups] = useState([]);
+  const [attendance, setAttendance] = useState([]);
 
   const canvasRef = useRef(null);
   const [activeCard, setActiveCard] = useState(null);
 
   const loadAll = useCallback(async () => {
     try {
-      const [s, bg, m, v, mk] = await Promise.all([
+      const [s, bg, m, v, mk, att] = await Promise.all([
         supabase.from("settings").select("*").eq("id", 1).single(),
         supabase.from("buddy_groups").select("*").order("name"),
         supabase.from("members").select("*").order("name"),
         supabase.from("visitors").select("*").order("registered_at", { ascending: false }),
         supabase.from("makeups").select("*").order("logged_at", { ascending: false }),
+        supabase.from("attendance").select("*").order("signed_in_at", { ascending: false }),
       ]);
       if (s.data) { setSettings(s.data); setSettingsForm(s.data); }
       setBuddyGroups(bg.data || []);
       setMembers(m.data || []);
       setVisitors(v.data || []);
       setMakeups(mk.data || []);
+      setAttendance(att.data || []);
     } catch (e) {
       flash("Could not load data — check your Supabase connection.", "err");
     }
@@ -184,6 +189,55 @@ export default function App() {
       });
     }
   }, [activeCard, settings]);
+
+  // Attendance metrics
+  const todayAttendance = useMemo(() => attendance.filter((a) => a.meeting_date === todayISO()), [attendance]);
+  const todayVisitors = useMemo(() => visitors.filter((v) => v.visit_date === todayISO()), [visitors]);
+
+  // Leaderboard calculation
+  const [leaderboardTime, setLeaderboardTime] = useState("today"); // "today" | "month" | "all"
+  const leaderboardData = useMemo(() => {
+    const now = new Date();
+    const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    return buddyGroups.map((g) => {
+      const groupMembers = members.filter((m) => m.buddy_group === g.name);
+      const totalGroupMembers = groupMembers.length;
+
+      let groupAttendanceRecords = [];
+      if (leaderboardTime === "today") {
+        groupAttendanceRecords = attendance.filter((a) => a.buddy_group === g.name && a.meeting_date === todayISO());
+      } else if (leaderboardTime === "month") {
+        groupAttendanceRecords = attendance.filter((a) => a.buddy_group === g.name && a.meeting_date.startsWith(currentMonthPrefix));
+      } else {
+        groupAttendanceRecords = attendance.filter((a) => a.buddy_group === g.name);
+      }
+
+      // Unique attendees for % rate calculation in current view
+      const uniqueAttendees = new Set(groupAttendanceRecords.map((a) => a.member_name.toLowerCase())).size;
+      const rate = totalGroupMembers > 0 ? Math.min(100, Math.round((uniqueAttendees / totalGroupMembers) * 100)) : 0;
+
+      return {
+        id: g.id,
+        name: g.name,
+        totalMembers: totalGroupMembers,
+        attendees: uniqueAttendees,
+        totalCheckins: groupAttendanceRecords.length,
+        rate,
+      };
+    }).sort((a, b) => b.rate - a.rate || b.attendees - a.attendees || a.name.localeCompare(b.name));
+  }, [buddyGroups, members, attendance, leaderboardTime]);
+
+  // Top performing group today
+  const topGroupToday = useMemo(() => {
+    const todayGroups = buddyGroups.map((g) => {
+      const gMembers = members.filter((m) => m.buddy_group === g.name).length;
+      const gAtt = attendance.filter((a) => a.buddy_group === g.name && a.meeting_date === todayISO()).length;
+      const rate = gMembers > 0 ? Math.round((gAtt / gMembers) * 100) : 0;
+      return { name: g.name, rate, gAtt, gMembers };
+    }).sort((a, b) => b.rate - a.rate || b.gAtt - a.gAtt);
+    return todayGroups.length > 0 && todayGroups[0].gAtt > 0 ? todayGroups[0] : null;
+  }, [buddyGroups, members, attendance]);
 
   // ---- Visitors ----
   const [visForm, setVisForm] = useState({ name: "", club: "", email: "", category: "Guest" });
@@ -205,7 +259,7 @@ export default function App() {
 
     if (visForm.category === "Rotarian" || visForm.category === "Rotaract") {
       const record = {
-        name, email, buddy_group: club, // "buddy_group" column reused to hold the visitor's home club
+        name, email, buddy_group: club,
         detail: `Attended ${settings.club_name}'s ${settings.meeting_label}`,
         activity_date: todayISO(), card_id: cardId(),
       };
@@ -225,12 +279,47 @@ export default function App() {
     setVisForm({ name: "", club: "", email: "", category: "Guest" });
   };
 
-  // ---- Members ----
+  // ---- Members & Attendance Check-in ----
   const [memberQuery, setMemberQuery] = useState("");
   const matchedMember = members.find((m) => m.name.toLowerCase() === memberQuery.trim().toLowerCase());
   const memberSuggestions = members.filter((m) => memberQuery.trim() && m.name.toLowerCase().includes(memberQuery.trim().toLowerCase()) && m.name.toLowerCase() !== memberQuery.trim().toLowerCase());
 
-  const [newMember, setNewMember] = useState({ name: "", buddyGroup: "", email: "" });
+  const isMemberSignedToday = matchedMember ? todayAttendance.some((a) => a.member_id === matchedMember.id || a.member_name.toLowerCase() === matchedMember.name.toLowerCase()) : false;
+  const currentMemberAttendanceRecord = matchedMember ? todayAttendance.find((a) => a.member_id === matchedMember.id || a.member_name.toLowerCase() === matchedMember.name.toLowerCase()) : null;
+
+  const [attendingBusy, setAttendingBusy] = useState(false);
+  const signInMember = async (memberToSign) => {
+    const target = memberToSign || matchedMember;
+    if (!target) return;
+    setAttendingBusy(true);
+    const { data, error } = await supabase.from("attendance").insert({
+      member_id: target.id,
+      member_name: target.name,
+      buddy_group: target.buddy_group,
+      meeting_date: todayISO(),
+    }).select().single();
+    setAttendingBusy(false);
+    if (error) {
+      if (error.code === "23505") {
+        flash("You are already checked in for today!", "ok");
+      } else {
+        flash("Could not sign in — try again.", "err");
+      }
+      return;
+    }
+    setAttendance([data, ...attendance]);
+    flash(`Signed in! Welcome to fellowship, ${target.name}! 🌟`);
+  };
+
+  const undoSignInMember = async (attendanceRecord) => {
+    if (!attendanceRecord) return;
+    const { error } = await supabase.from("attendance").delete().eq("id", attendanceRecord.id);
+    if (error) { flash("Could not undo sign-in.", "err"); return; }
+    setAttendance(attendance.filter((a) => a.id !== attendanceRecord.id));
+    flash("Sign-in cancelled.");
+  };
+
+  const [newMember, setNewMember] = useState({ name: "", buddyGroup: "", email: "", autoCheckIn: true });
   const [memberBusy, setMemberBusy] = useState(false);
   const registerMember = async () => {
     const name = newMember.name.trim(), email = newMember.email.trim().toLowerCase();
@@ -238,16 +327,35 @@ export default function App() {
     if (members.some((m) => m.name.toLowerCase() === name.toLowerCase())) { flash("Someone with that name is already registered.", "err"); return; }
     setMemberBusy(true);
     const { data, error } = await supabase.from("members").insert({ name, buddy_group: newMember.buddyGroup, email }).select().single();
+    if (error) {
+      setMemberBusy(false);
+      flash("Could not save member — try again.", "err");
+      return;
+    }
+
+    let newAttList = [...attendance];
+    if (newMember.autoCheckIn) {
+      const attRes = await supabase.from("attendance").insert({
+        member_id: data.id,
+        member_name: data.name,
+        buddy_group: data.buddy_group,
+        meeting_date: todayISO(),
+      }).select().single();
+      if (!attRes.error) {
+        newAttList = [attRes.data, ...newAttList];
+      }
+    }
+
     setMemberBusy(false);
-    if (error) { flash("Could not save — try again.", "err"); return; }
     setMembers([...members, data]);
+    setAttendance(newAttList);
     setMemberQuery(name);
-    setNewMember({ name: "", buddyGroup: "", email: "" });
-    flash(`Welcome to the club, ${name}!`);
+    setNewMember({ name: "", buddyGroup: "", email: "", autoCheckIn: true });
+    flash(`Welcome to the club & fellowship, ${name}! 🎉`);
   };
 
   const downloadCard = () => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current || !activeCard) return;
     const link = document.createElement("a");
     link.download = `makeup-card-${activeCard.card_id}.png`;
     link.href = canvasRef.current.toDataURL("image/png");
@@ -305,13 +413,43 @@ export default function App() {
     setMakeups(makeups.map((x) => (x.id === mk.id ? { ...x, verified: next } : x)));
     flash(next ? "Marked as verified." : "Marked as pending.");
   };
-  const exportCsv = (which) => {
-    if (which === "members") downloadBlob("rotary-members.csv", csv([["Name","Buddy Group","Email","Registered At"], ...members.map((m) => [m.name, m.buddy_group, m.email, m.registered_at])]));
-    else if (which === "visitors") downloadBlob("rotary-visitors.csv", csv([["Name","Home Club","Email","Category","Date","Registered At"], ...visitors.map((v) => [v.name, v.home_club, v.email, v.category, v.visit_date, v.registered_at])]));
-    else downloadBlob("rotary-makeups.csv", csv([["Name","Home Club","Email","Detail","Date","Verified","Card ID","Logged At"], ...makeups.map((m) => [m.name, m.buddy_group, m.email, m.detail, m.activity_date, m.verified ? "Yes" : "No", m.card_id, m.logged_at])]));
+
+  const removeAttendance = async (attItem) => {
+    const { error } = await supabase.from("attendance").delete().eq("id", attItem.id);
+    if (error) { flash("Could not remove attendance record.", "err"); return; }
+    setAttendance(attendance.filter((x) => x.id !== attItem.id)); flash("Attendance entry removed.");
   };
 
-  const todayVisitors = visitors.filter((v) => v.visit_date === todayISO());
+  const manualCheckIn = async (memberId) => {
+    const m = members.find((x) => String(x.id) === String(memberId));
+    if (!m) return;
+    const { data, error } = await supabase.from("attendance").insert({
+      member_id: m.id,
+      member_name: m.name,
+      buddy_group: m.buddy_group,
+      meeting_date: todayISO(),
+    }).select().single();
+    if (error) {
+      if (error.code === "23505") flash("Member is already checked in for today.", "err");
+      else flash("Could not check in member.", "err");
+      return;
+    }
+    setAttendance([data, ...attendance]);
+    flash(`Checked in ${m.name}!`);
+  };
+
+  const exportCsv = (which) => {
+    if (which === "members") {
+      downloadBlob("rotary-members.csv", csv([["Name","Buddy Group","Email","Registered At"], ...members.map((m) => [m.name, m.buddy_group, m.email, m.registered_at])]));
+    } else if (which === "visitors") {
+      downloadBlob("rotary-visitors.csv", csv([["Name","Home Club","Email","Category","Date","Registered At"], ...visitors.map((v) => [v.name, v.home_club, v.email, v.category, v.visit_date, v.registered_at])]));
+    } else if (which === "attendance") {
+      downloadBlob("rotary-attendance.csv", csv([["Member Name","Buddy Group","Meeting Date","Signed In At"], ...attendance.map((a) => [a.member_name, a.buddy_group, a.meeting_date, a.signed_in_at])]));
+    } else {
+      downloadBlob("rotary-makeups.csv", csv([["Name","Home Club","Email","Detail","Date","Verified","Card ID","Logged At"], ...makeups.map((m) => [m.name, m.buddy_group, m.email, m.detail, m.activity_date, m.verified ? "Yes" : "No", m.card_id, m.logged_at])]));
+    }
+  };
+
   const [visitorFilter, setVisitorFilter] = useState("All");
   const filteredVisitors = visitorFilter === "All" ? visitors : visitors.filter((v) => v.category === visitorFilter);
 
@@ -335,25 +473,26 @@ export default function App() {
         .rot-bg-logo { position:absolute; width:900px; max-width:none; top:50%; left:50%; transform:translate(-50%,-50%); opacity:0.06; pointer-events:none; filter:grayscale(1) brightness(2); }
         .rot-logo-top { display:block; margin:0 auto 16px; height:64px; width:auto; }
         .rot-district-footer { text-align:center; padding:26px 0 6px; font-size:11px; letter-spacing:0.14em; color:rgba(245,246,255,0.35); text-transform:uppercase; position:relative; z-index:1; }
-        .rot-landing-content { position:relative; z-index:1; max-width:680px; }
+        .rot-landing-content { position:relative; z-index:1; max-width:760px; }
         .rot-landing-eyebrow { letter-spacing:0.22em; font-size:12px; font-weight:700; color:var(--amber); text-transform:uppercase; }
         .rot-landing-title { font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:52px; line-height:1.05; margin:14px 0 4px; background:linear-gradient(100deg,#fff 20%,var(--blue) 60%,var(--coral) 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }
         .rot-landing-tagline { color:var(--amber); font-size:13px; font-weight:700; letter-spacing:0.16em; margin:0 0 18px; }
-        .rot-landing-sub { color:rgba(245,246,255,0.65); font-size:16px; max-width:480px; margin:0 auto 34px; }
+        .rot-landing-sub { color:rgba(245,246,255,0.65); font-size:16px; max-width:520px; margin:0 auto 30px; }
         .rot-landing-ctas { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; }
-        .rot-cta { flex:1; min-width:220px; max-width:260px; background:rgba(245,246,255,0.05); border:1px solid var(--line); backdrop-filter:blur(12px); border-radius:18px; padding:26px 22px; cursor:pointer; text-align:left; transition:transform .15s ease, border-color .15s ease, background .15s ease; }
+        .rot-cta { flex:1; min-width:210px; max-width:240px; background:rgba(245,246,255,0.05); border:1px solid var(--line); backdrop-filter:blur(12px); border-radius:18px; padding:24px 20px; cursor:pointer; text-align:left; transition:transform .15s ease, border-color .15s ease, background .15s ease; }
         .rot-cta:hover { transform:translateY(-4px); border-color:rgba(245,246,255,0.3); background:rgba(245,246,255,0.08); }
         .rot-cta-icon { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; margin-bottom:14px; }
         .rot-cta-icon.blue { background:linear-gradient(135deg,var(--blue),#6f8fff); }
         .rot-cta-icon.coral { background:linear-gradient(135deg,var(--coral),var(--amber)); }
-        .rot-cta h3 { font-family:'Space Grotesk',sans-serif; font-size:19px; margin:0 0 6px; }
-        .rot-cta p { font-size:13.5px; color:rgba(245,246,255,0.6); margin:0; line-height:1.4; }
-        .rot-landing-foot { margin-top:36px; display:flex; gap:14px; font-size:13px; justify-content:center; }
+        .rot-cta-icon.gold { background:linear-gradient(135deg,#FFD700,#FFA500); }
+        .rot-cta h3 { font-family:'Space Grotesk',sans-serif; font-size:18px; margin:0 0 6px; }
+        .rot-cta p { font-size:13px; color:rgba(245,246,255,0.6); margin:0; line-height:1.4; }
+        .rot-landing-foot { margin-top:34px; display:flex; gap:12px; font-size:13px; justify-content:center; flex-wrap:wrap; }
         .rot-landing-foot button { background:none; border:1px solid var(--line); color:rgba(245,246,255,0.6); cursor:pointer; font:inherit; padding:9px 18px; border-radius:20px; transition:border-color .15s, color .15s, background .15s; }
         .rot-landing-foot button:hover { color:var(--paper); border-color:rgba(245,246,255,0.35); background:rgba(245,246,255,0.04); }
 
         /* ---- App shell ---- */
-        .rot-app { padding:24px 20px 40px; max-width:960px; margin:0 auto; }
+        .rot-app { padding:24px 20px 40px; max-width:980px; margin:0 auto; }
         .rot-header { text-align:center; margin-bottom:18px; padding-top:44px; position:relative; }
         .rot-home-link { position:absolute; left:0; top:0; background:none; border:1px solid var(--line); color:rgba(245,246,255,0.6); font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; padding:8px 14px; border-radius:20px; transition:border-color .15s, color .15s, background .15s; }
         .rot-home-link:hover { color:var(--paper); border-color:rgba(245,246,255,0.35); background:rgba(245,246,255,0.04); }
@@ -361,9 +500,9 @@ export default function App() {
         .rot-title { font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:28px; margin:6px 0 2px; }
         .rot-sub { color:rgba(245,246,255,0.5); font-size:12px; font-weight:600; letter-spacing:0.14em; margin-top:2px; }
         .rot-tabs { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; background:rgba(245,246,255,0.04); border:1px solid var(--line); border-radius:16px; padding:6px; margin:0 auto; }
-        .rot-tab { display:flex; align-items:center; gap:6px; padding:10px 16px; font-weight:600; font-size:13.5px; background:none; border:none; border-radius:11px; cursor:pointer; color:rgba(245,246,255,0.55); transition:background .15s, color .15s; }
+        .rot-tab { display:flex; align-items:center; gap:6px; padding:10px 15px; font-weight:600; font-size:13.5px; background:none; border:none; border-radius:11px; cursor:pointer; color:rgba(245,246,255,0.55); transition:background .15s, color .15s; }
         .rot-tab.active { color:var(--ink); background:linear-gradient(120deg,var(--blue),var(--coral)); }
-        .rot-panel { max-width:920px; margin:22px auto 0; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:26px; box-shadow:0 20px 50px rgba(0,0,0,0.25); }
+        .rot-panel { max-width:940px; margin:22px auto 0; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:26px; box-shadow:0 20px 50px rgba(0,0,0,0.25); }
         .rot-field { margin-bottom:14px; }
         .rot-field label { display:block; font-size:12px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:rgba(245,246,255,0.5); margin-bottom:6px; }
         .rot-field input, .rot-field select, .rot-field textarea { width:100%; padding:11px 13px; border:1px solid var(--line); background:rgba(245,246,255,0.04); border-radius:9px; font-size:15px; font-family:inherit; color:var(--paper); }
@@ -380,20 +519,23 @@ export default function App() {
         .rot-btn:active { transform:scale(0.98); }
         .rot-btn:disabled { opacity:0.5; cursor:default; }
         .rot-btn.gold { background:linear-gradient(120deg,var(--coral),var(--amber)); color:var(--ink); }
+        .rot-btn.green { background:linear-gradient(120deg,#10B981,#059669); color:#fff; }
         .rot-btn.ghost { background:none; color:var(--paper); border:1px solid var(--line); }
         .rot-btn.danger { background:none; color:#FF7B72; border:1px solid rgba(255,123,114,0.3); }
+        .rot-btn-block { width:100%; }
         .rot-list { margin-top:14px; display:flex; flex-direction:column; gap:8px; }
         .rot-person { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border:1px solid var(--line); border-radius:11px; gap:10px; background:rgba(245,246,255,0.02); }
         .rot-person .meta { font-size:13px; color:rgba(245,246,255,0.5); }
-        .rot-badge { font-size:12px; font-weight:700; color:var(--amber); background:rgba(255,176,32,0.14); padding:3px 8px; border-radius:20px; white-space:nowrap; }
-        .rot-badge-verified { color:#3DDC91; background:rgba(61,220,145,0.14); }
+        .rot-badge { font-size:12px; font-weight:700; color:var(--amber); background:rgba(255,176,32,0.14); padding:4px 9px; border-radius:20px; white-space:nowrap; display:inline-flex; align-items:center; gap:5px; }
+        .rot-badge-verified, .rot-badge-green { color:#3DDC91; background:rgba(61,220,145,0.14); }
         .rot-badge-pending { color:#FF7B72; background:rgba(255,123,114,0.12); }
+        .rot-badge-blue { color:#60A5FA; background:rgba(96,165,250,0.14); }
         .rot-toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); padding:10px 18px; border-radius:10px; font-size:14px; font-weight:600; background:var(--ink2); border:1px solid var(--line); color:#fff; z-index:200; display:flex; gap:8px; align-items:center; box-shadow:0 10px 30px rgba(0,0,0,0.4); }
         .rot-toast.err { border-color:rgba(255,123,114,0.4); }
-        .rot-stats { display:flex; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
-        .rot-stat { flex:1; min-width:120px; border:1px solid var(--line); border-radius:12px; padding:16px; text-align:center; background:rgba(245,246,255,0.02); }
+        .rot-stats { display:flex; gap:14px; margin-bottom:20px; flex-wrap:wrap; }
+        .rot-stat { flex:1; min-width:130px; border:1px solid var(--line); border-radius:12px; padding:16px; text-align:center; background:rgba(245,246,255,0.02); }
         .rot-stat .n { font-family:'Space Grotesk',sans-serif; font-size:28px; font-weight:800; background:linear-gradient(120deg,var(--blue),var(--coral)); -webkit-background-clip:text; background-clip:text; color:transparent; }
-        .rot-stat .l { font-size:11px; color:rgba(245,246,255,0.5); text-transform:uppercase; letter-spacing:0.05em; }
+        .rot-stat .l { font-size:11px; color:rgba(245,246,255,0.5); text-transform:uppercase; letter-spacing:0.05em; margin-top:2px; }
         .rot-card-preview { display:flex; flex-direction:column; align-items:center; gap:14px; margin-top:18px; }
         .rot-card-preview canvas { width:100%; max-width:640px; border-radius:14px; box-shadow:0 20px 50px rgba(0,0,0,0.45); }
         .rot-modal-backdrop { position:fixed; inset:0; background:rgba(5,7,16,0.75); backdrop-filter:blur(4px); z-index:100; display:flex; align-items:center; justify-content:center; padding:20px; overflow-y:auto; }
@@ -404,14 +546,35 @@ export default function App() {
         .rot-card-lookup { margin-top:18px; padding-top:18px; border-top:1px dashed var(--line); }
         .rot-card-lookup-toggle { background:none; border:none; color:var(--amber); font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:7px; padding:0; }
         .rot-card-lookup-toggle:hover { color:var(--paper); }
-        .rot-notice { font-size:12.5px; color:rgba(245,246,255,0.55); background:rgba(61,107,255,0.08); border:1px dashed var(--line); border-radius:9px; padding:10px 12px; margin-top:10px; }
+        .rot-notice { font-size:12.5px; color:rgba(245,246,255,0.6); background:rgba(61,107,255,0.08); border:1px dashed var(--line); border-radius:9px; padding:12px 14px; margin-top:12px; }
+        .rot-notice.success { background:rgba(16,185,129,0.1); border-color:rgba(16,185,129,0.3); color:#E2E8F0; }
         .rot-subtabs { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
-        .rot-subtab { padding:7px 14px; border-radius:20px; border:1px solid var(--line); background:rgba(245,246,255,0.03); font-size:13px; font-weight:600; cursor:pointer; color:rgba(245,246,255,0.6); }
+        .rot-subtab { padding:7px 14px; border-radius:20px; border:1px solid var(--line); background:rgba(245,246,255,0.03); font-size:13px; font-weight:600; cursor:pointer; color:rgba(245,246,255,0.6); transition:background .15s, color .15s, border-color .15s; }
         .rot-subtab.active { background:linear-gradient(120deg,var(--blue),var(--coral)); color:var(--ink); border-color:transparent; }
         .rot-doorsign { display:flex; flex-direction:column; align-items:center; gap:10px; padding:40px 26px; }
         .rot-doorsign-h { font-family:'Space Grotesk',sans-serif; font-size:24px; margin:4px 0 10px; text-align:center; }
         .rot-qr-img { width:260px; height:260px; border:1px solid var(--line); border-radius:14px; padding:10px; background:#fff; }
         .rot-doorsign-sub { color:rgba(245,246,255,0.55); margin-bottom:6px; }
+
+        /* ---- Leaderboard UI ---- */
+        .rot-leader-podium { display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:14px; margin-bottom:24px; }
+        .rot-podium-card { background:rgba(245,246,255,0.03); border:1px solid var(--line); border-radius:14px; padding:18px 16px; text-align:center; position:relative; overflow:hidden; }
+        .rot-podium-card.rank-1 { border-color:rgba(255,215,0,0.4); background:radial-gradient(circle at 50% 0%, rgba(255,215,0,0.15), transparent 70%), rgba(245,246,255,0.03); }
+        .rot-podium-card.rank-2 { border-color:rgba(192,192,192,0.4); background:radial-gradient(circle at 50% 0%, rgba(192,192,192,0.12), transparent 70%), rgba(245,246,255,0.03); }
+        .rot-podium-card.rank-3 { border-color:rgba(205,127,50,0.4); background:radial-gradient(circle at 50% 0%, rgba(205,127,50,0.12), transparent 70%), rgba(245,246,255,0.03); }
+        .rot-podium-medal { font-size:26px; margin-bottom:6px; }
+        .rot-podium-title { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:17px; margin-bottom:4px; }
+        .rot-podium-rate { font-size:24px; font-weight:800; color:var(--amber); }
+        .rot-podium-sub { font-size:12px; color:rgba(245,246,255,0.5); }
+        
+        .rot-leader-row { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border:1px solid var(--line); border-radius:12px; margin-bottom:8px; background:rgba(245,246,255,0.02); gap:12px; }
+        .rot-leader-left { display:flex; align-items:center; gap:12px; flex:1; }
+        .rot-leader-rank { width:30px; font-family:'Space Grotesk',sans-serif; font-size:16px; font-weight:700; color:rgba(245,246,255,0.45); }
+        .rot-leader-info { flex:1; }
+        .rot-progress-bg { width:100%; height:6px; background:rgba(245,246,255,0.08); border-radius:3px; margin-top:6px; overflow:hidden; }
+        .rot-progress-fill { height:100%; border-radius:3px; background:linear-gradient(90deg, var(--blue), var(--coral)); transition:width .4s ease; }
+        .rot-leader-right { text-align:right; min-width:80px; }
+
         @media print { .rot-tabs,.rot-notice,.rot-btn,.rot-home-link { display:none !important; } .rot-qr-img { width:320px; height:320px; } }
 
         /* ---- Mobile layout ---- */
@@ -447,9 +610,8 @@ export default function App() {
           .rot-card-preview > div > button { width:100%; }
           .rot-qr-img { width:200px; height:200px; }
           .rot-doorsign-h { font-size:20px; }
-          h4 { font-size:15px; }
-          .rot-modal { padding:16px; border-radius:12px; }
-          .rot-modal-backdrop { padding:10px; }
+          .rot-leader-row { flex-direction:column; align-items:flex-start; }
+          .rot-leader-right { text-align:left; width:100%; display:flex; justify-content:space-between; margin-top:6px; }
         }
       `}</style>
 
@@ -459,200 +621,370 @@ export default function App() {
           <div className="rot-landing-glow" />
           <div className="rot-landing-content">
             <img className="rot-logo-top" src="/rotary-logo.png" alt="Rotary International" />
-            <div className="rot-landing-eyebrow">Attendance · Make-Up Cards</div>
+            <div className="rot-landing-eyebrow">Weekly Attendance · Buddy Groups · Make-Ups</div>
             <h1 className="rot-landing-title">{settings.club_name}</h1>
             <div className="rot-landing-tagline">“SERVICE ABOVE SELF”</div>
-            <p className="rot-landing-sub">Register as a visitor, or sign in as a member to log your make-up and get your card instantly.</p>
+            <p className="rot-landing-sub">Sign in for today's weekly fellowship meeting, view your Buddy Group leaderboard standings, or register as a visiting Rotarian.</p>
+            
             <div className="rot-landing-ctas">
+              <div className="rot-cta" onClick={() => enterApp("members")}>
+                <div className="rot-cta-icon coral"><UserCheck size={20} color="#090C16" /></div>
+                <h3>Member Sign-In</h3>
+                <p>Check in to today's meeting & boost your buddy group score.</p>
+              </div>
+              <div className="rot-cta" onClick={() => enterApp("leaderboard")}>
+                <div className="rot-cta-icon gold"><Trophy size={20} color="#090C16" /></div>
+                <h3>Leaderboard</h3>
+                <p>See real-time buddy group attendance rankings & stats.</p>
+              </div>
               <div className="rot-cta" onClick={() => enterApp("visitors")}>
                 <div className="rot-cta-icon blue"><UserPlus size={20} color="#fff" /></div>
-                <h3>I'm a Visitor</h3>
-                <p>Register your name, home club, and whether you're a Rotarian, Rotaractor, or guest.</p>
-              </div>
-              <div className="rot-cta" onClick={() => enterApp("members")}>
-                <div className="rot-cta-icon coral"><UsersRound size={20} color="#090C16" /></div>
-                <h3>I'm a Member</h3>
-                <p>Find your name, log a make-up, and get your card instantly.</p>
+                <h3>Visiting Rotarian</h3>
+                <p>Register as a guest or visitor and download your make-up card.</p>
               </div>
             </div>
+
             <div className="rot-landing-foot">
-              <button type="button" onClick={() => enterApp("qr")}>Scan code</button>
-              <button type="button" onClick={() => enterApp("admin")}>Admin</button>
+              <button type="button" onClick={() => enterApp("qr")}><QrCode size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }}/> Door Sign QR</button>
+              <button type="button" onClick={() => enterApp("admin")}><ShieldCheck size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }}/> Admin Portal</button>
             </div>
           </div>
           <div className="rot-district-footer">District 9213</div>
         </div>
       ) : (
       <div className="rot-app">
-      <div className="rot-header">
-        <button type="button" className="rot-home-link" onClick={() => setView("landing")}>← Home</button>
-        <img className="rot-logo-top" style={{ height: 44 }} src="/rotary-logo.png" alt="Rotary International" />
-        <div className="rot-eyebrow">Visitors · Members · Make-Up Cards</div>
-        <div className="rot-title">{settings.club_name}</div>
-        <div className="rot-sub">“SERVICE ABOVE SELF”</div>
-      </div>
+        <div className="rot-header">
+          <button type="button" className="rot-home-link" onClick={() => setView("landing")}>← Home</button>
+          <img className="rot-logo-top" style={{ height: 44 }} src="/rotary-logo.png" alt="Rotary International" />
+          <div className="rot-eyebrow">Attendance · Buddy Groups · Make-Up Cards</div>
+          <div className="rot-title">{settings.club_name}</div>
+          <div className="rot-sub">“SERVICE ABOVE SELF”</div>
+        </div>
 
-      <div className="rot-tabs">
-        <button className={`rot-tab ${tab === "visitors" ? "active" : ""}`} onClick={() => setTab("visitors")}><UserPlus size={16}/> Visitors</button>
-        <button className={`rot-tab ${tab === "members" ? "active" : ""}`} onClick={() => setTab("members")}><UsersRound size={16}/> Members</button>
-        <button className={`rot-tab ${tab === "qr" ? "active" : ""}`} onClick={() => setTab("qr")}><QrCode size={16}/> Scan Code</button>
-        <button className={`rot-tab ${tab === "admin" ? "active" : ""}`} onClick={() => setTab("admin")}><ShieldCheck size={16}/> Admin {adminUnlocked ? "" : "🔒"}</button>
-      </div>
+        <div className="rot-tabs">
+          <button className={`rot-tab ${tab === "members" ? "active" : ""}`} onClick={() => setTab("members")}><UsersRound size={16}/> Members</button>
+          <button className={`rot-tab ${tab === "leaderboard" ? "active" : ""}`} onClick={() => setTab("leaderboard")}><Trophy size={16}/> Leaderboard</button>
+          <button className={`rot-tab ${tab === "visitors" ? "active" : ""}`} onClick={() => setTab("visitors")}><UserPlus size={16}/> Visitors</button>
+          <button className={`rot-tab ${tab === "qr" ? "active" : ""}`} onClick={() => setTab("qr")}><QrCode size={16}/> Door QR</button>
+          <button className={`rot-tab ${tab === "admin" ? "active" : ""}`} onClick={() => setTab("admin")}><ShieldCheck size={16}/> Admin {adminUnlocked ? "" : "🔒"}</button>
+        </div>
 
-      {!ready ? (
-        <div className="rot-panel rot-empty"><Loader2 size={20}/> Loading club data…</div>
-      ) : (
-        <>
-          {tab === "visitors" && (
-            <div className="rot-panel">
-              <p style={{ marginTop: 0, color: "rgba(245,246,255,0.55)", fontSize: 14 }}>Not a member of {settings.club_name}? Register here as a visitor — this is open to anyone.</p>
-              <div className="rot-field"><label>Full name</label><input value={visForm.name} onChange={(e) => setVisForm({ ...visForm, name: e.target.value })} placeholder="e.g. Grace Nabatanzi" /></div>
-              <div className="rot-row">
-                <div className="rot-field"><label>Your club</label><input value={visForm.club} onChange={(e) => setVisForm({ ...visForm, club: e.target.value })} placeholder="e.g. Rotary Club of Entebbe" /></div>
-                <div className="rot-field"><label>Email</label><input type="email" value={visForm.email} onChange={(e) => setVisForm({ ...visForm, email: e.target.value })} placeholder="you@example.com" /></div>
-              </div>
-              <div className="rot-field">
-                <label>You are a</label>
-                <div className="rot-category-picker">
-                  {["Rotarian","Rotaract","Guest"].map((c) => (
-                    <button
-                      type="button"
-                      key={c}
-                      className={`rot-category-btn ${visForm.category === c ? "active" : ""}`}
-                      onClick={() => setVisForm({ ...visForm, category: c })}
-                    >
-                      {c}
-                    </button>
-                  ))}
+        {!ready ? (
+          <div className="rot-panel rot-empty"><Loader2 size={20} className="animate-spin" /> Loading club data…</div>
+        ) : (
+          <>
+            {/* ===================== MEMBERS TAB ===================== */}
+            {tab === "members" && (
+              <div className="rot-panel">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 18, fontFamily: "'Space Grotesk', sans-serif" }}>Weekly Meeting Sign-In</h3>
+                    <p style={{ margin: "2px 0 0", color: "rgba(245,246,255,0.55)", fontSize: 13 }}>
+                      {prettyDate(todayISO())} · {settings.meeting_label}
+                    </p>
+                  </div>
+                  <span className="rot-badge rot-badge-blue">
+                    <UserCheck size={13} /> {todayAttendance.length} signed in today
+                  </span>
                 </div>
-                {(visForm.category === "Rotarian" || visForm.category === "Rotaract") && (
-                  <div className="rot-notice">You'll get a make-up card after registering — proof of attendance to take back to your own club.</div>
-                )}
-              </div>
-              <button type="button" className="rot-btn rot-btn-block" disabled={visBusy} onClick={submitVisitor}>{visBusy ? <Loader2 size={16}/> : <UserPlus size={16}/>} Register as visitor</button>
-              <div className="rot-notice">{todayVisitors.length} visitor(s) registered today · {visitors.length} all-time.</div>
 
-              <div className="rot-card-lookup">
-                <button type="button" className="rot-card-lookup-toggle" onClick={() => setShowCardLookup(!showCardLookup)}>
-                  <ClipboardList size={14} /> Already registered? Get your make-up card
-                </button>
-                {showCardLookup && (
-                  <div style={{ marginTop: 12 }}>
-                    <div className="rot-field">
-                      <label>Type the name you registered with</label>
-                      <input value={cardLookupQuery} onChange={(e) => setCardLookupQuery(e.target.value)} placeholder="Your full name" />
-                    </div>
-                    {cardLookupQuery.trim() && (
-                      cardLookupResults.length === 0 ? (
-                        <div className="rot-empty">No make-up card found for that name.</div>
-                      ) : (
-                        <div className="rot-list">
-                          {cardLookupResults.map((mk) => (
-                            <div className="rot-person" key={mk.id}>
-                              <div><strong>{mk.name}</strong><div className="meta">Visiting from {mk.buddy_group} · {prettyDate(mk.activity_date)}</div></div>
-                              <button type="button" className="rot-btn ghost" onClick={() => setActiveCard(mk)}>View card</button>
-                            </div>
-                          ))}
+                <div className="rot-field">
+                  <label>Search your name</label>
+                  <div style={{ position: "relative" }}>
+                    <Search size={16} style={{ position: "absolute", left: 12, top: 13, color: "rgba(245,246,255,0.35)" }} />
+                    <input style={{ paddingLeft: 34 }} value={memberQuery} onChange={(e) => setMemberQuery(e.target.value)} placeholder="Type your first or last name…" />
+                  </div>
+                  {memberSuggestions.length > 0 && (
+                    <div className="rot-list">
+                      {memberSuggestions.slice(0, 5).map((m) => (
+                        <div className="rot-person" key={m.id} onClick={() => setMemberQuery(m.name)} style={{ cursor: "pointer" }}>
+                          <div><strong>{m.name}</strong><div className="meta">{m.buddy_group}</div></div>
+                          <span className="rot-badge">{m.buddy_group}</span>
                         </div>
-                      )
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {matchedMember ? (
+                  <div style={{ marginTop: 18 }}>
+                    <div className={`rot-notice ${isMemberSignedToday ? "success" : ""}`} style={{ padding: 18 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
+                        <div>
+                          <div style={{ fontSize: 17, fontWeight: 700, color: "#fff" }}>{matchedMember.name}</div>
+                          <div style={{ fontSize: 13, color: "rgba(245,246,255,0.7)", marginTop: 2 }}>
+                            Buddy Group: <strong>{matchedMember.buddy_group}</strong> · {matchedMember.email}
+                          </div>
+                        </div>
+                        {isMemberSignedToday ? (
+                          <span className="rot-badge rot-badge-green" style={{ fontSize: 13, padding: "5px 12px" }}>
+                            <CheckCircle2 size={15} /> Signed In for Today
+                          </span>
+                        ) : (
+                          <span className="rot-badge rot-badge-pending">Not signed in yet</span>
+                        )}
+                      </div>
+
+                      <div style={{ marginTop: 16 }}>
+                        {isMemberSignedToday ? (
+                          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                            <div style={{ fontSize: 13, color: "rgba(245,246,255,0.8)" }}>
+                              ✓ Attendance recorded for {prettyDate(todayISO())}
+                            </div>
+                            <button
+                              type="button"
+                              className="rot-btn ghost"
+                              style={{ padding: "6px 12px", fontSize: 12, marginLeft: "auto" }}
+                              onClick={() => undoSignInMember(currentMemberAttendanceRecord)}
+                            >
+                              Undo Sign-In
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="rot-btn green rot-btn-block"
+                            disabled={attendingBusy}
+                            onClick={() => signInMember(matchedMember)}
+                            style={{ padding: "14px", fontSize: 16 }}
+                          >
+                            {attendingBusy ? <Loader2 size={18} className="animate-spin" /> : <UserCheck size={18} />}
+                            Sign In for Today's Meeting
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {topGroupToday && (
+                      <div className="rot-notice" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <Trophy size={16} color="#FFD700" />
+                          <span><strong>{topGroupToday.name}</strong> leads today's attendance with {topGroupToday.rate}% ({topGroupToday.gAtt}/{topGroupToday.gMembers} members)!</span>
+                        </div>
+                        <button type="button" className="rot-btn ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setTab("leaderboard")}>
+                          View Leaderboard →
+                        </button>
+                      </div>
                     )}
                   </div>
+                ) : (
+                  memberQuery.trim() && memberSuggestions.length === 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <div className="rot-notice">No member found with that exact name. New to the club? Register below:</div>
+                      <div style={{ marginTop: 14 }}>
+                        <div className="rot-field"><label>Full name</label><input value={newMember.name} onChange={(e) => setNewMember({ ...newMember, name: e.target.value })} placeholder="Your full name" /></div>
+                        <div className="rot-row">
+                          <div className="rot-field">
+                            <label>Buddy group</label>
+                            {buddyGroups.length === 0 ? (
+                              <select disabled><option>No groups yet — ask your admin</option></select>
+                            ) : (
+                              <select value={newMember.buddyGroup} onChange={(e) => setNewMember({ ...newMember, buddyGroup: e.target.value })}>
+                                <option value="">Choose your group…</option>
+                                {buddyGroups.map((g) => <option key={g.id} value={g.name}>{g.name}</option>)}
+                              </select>
+                            )}
+                          </div>
+                          <div className="rot-field"><label>Email</label><input type="email" value={newMember.email} onChange={(e) => setNewMember({ ...newMember, email: e.target.value })} placeholder="you@example.com" /></div>
+                        </div>
+                        <div style={{ marginBottom: 14 }}>
+                          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, cursor: "pointer", color: "rgba(245,246,255,0.85)" }}>
+                            <input
+                              type="checkbox"
+                              checked={newMember.autoCheckIn}
+                              onChange={(e) => setNewMember({ ...newMember, autoCheckIn: e.target.checked })}
+                              style={{ width: "auto", margin: 0 }}
+                            />
+                            Sign me in for today's meeting automatically
+                          </label>
+                        </div>
+                        <button type="button" className="rot-btn rot-btn-block" disabled={memberBusy || buddyGroups.length === 0} onClick={registerMember}>
+                          {memberBusy ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16}/>} Register as a member
+                        </button>
+                      </div>
+                    </div>
+                  )
                 )}
               </div>
-            </div>
-          )}
+            )}
 
-          {tab === "members" && (
-            <div className="rot-panel">
-              <div className="rot-field">
-                <label>Type your name</label>
-                <div style={{ position: "relative" }}>
-                  <Search size={16} style={{ position: "absolute", left: 12, top: 13, color: "rgba(245,246,255,0.35)" }} />
-                  <input style={{ paddingLeft: 34 }} value={memberQuery} onChange={(e) => setMemberQuery(e.target.value)} placeholder="Start typing your name…" />
-                </div>
-                {memberSuggestions.length > 0 && (
-                  <div className="rot-list">
-                    {memberSuggestions.slice(0, 5).map((m) => (
-                      <div className="rot-person" key={m.id} onClick={() => setMemberQuery(m.name)} style={{ cursor: "pointer" }}>
-                        <div><strong>{m.name}</strong><div className="meta">{m.buddy_group}</div></div>
-                      </div>
+            {/* ===================== LEADERBOARD TAB ===================== */}
+            {tab === "leaderboard" && (
+              <div className="rot-panel">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 20, fontFamily: "'Space Grotesk', sans-serif", display: "flex", alignItems: "center", gap: 8 }}>
+                      <Trophy size={20} color="#FFD700" /> Buddy Group Leaderboard
+                    </h3>
+                    <p style={{ margin: "2px 0 0", color: "rgba(245,246,255,0.55)", fontSize: 13 }}>
+                      Tracking attendance percentage & fellowship engagement
+                    </p>
+                  </div>
+                  <div className="rot-subtabs" style={{ marginBottom: 0 }}>
+                    {[["today", "Today's Meeting"], ["month", "This Month"], ["all", "All Time"]].map(([key, label]) => (
+                      <button key={key} type="button" className={`rot-subtab ${leaderboardTime === key ? "active" : ""}`} onClick={() => setLeaderboardTime(key)}>
+                        {label}
+                      </button>
                     ))}
                   </div>
+                </div>
+
+                {/* Top 3 Podium */}
+                {leaderboardData.length > 0 && (
+                  <div className="rot-leader-podium">
+                    {leaderboardData.slice(0, 3).map((group, idx) => {
+                      const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉";
+                      return (
+                        <div key={group.id} className={`rot-podium-card rank-${idx + 1}`}>
+                          <div className="rot-podium-medal">{medal}</div>
+                          <div className="rot-podium-title">{group.name}</div>
+                          <div className="rot-podium-rate">{group.rate}%</div>
+                          <div className="rot-podium-sub">{group.attendees} of {group.totalMembers} members present</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Full Group Ranking List */}
+                <div style={{ marginTop: 14 }}>
+                  <h4 style={{ margin: "0 0 12px", fontSize: 14, color: "rgba(245,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                    Full Standings ({leaderboardData.length} Groups)
+                  </h4>
+                  {leaderboardData.length === 0 ? (
+                    <div className="rot-empty">No buddy groups found. Add groups in the Admin panel.</div>
+                  ) : (
+                    leaderboardData.map((group, index) => (
+                      <div className="rot-leader-row" key={group.id}>
+                        <div className="rot-leader-left">
+                          <div className="rot-leader-rank">#{index + 1}</div>
+                          <div className="rot-leader-info">
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <strong style={{ fontSize: 15 }}>{group.name}</strong>
+                              <span style={{ fontSize: 13, color: "rgba(245,246,255,0.6)" }}>
+                                {group.attendees} / {group.totalMembers} present ({group.rate}%)
+                              </span>
+                            </div>
+                            <div className="rot-progress-bg">
+                              <div className="rot-progress-fill" style={{ width: `${group.rate}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ===================== VISITORS TAB ===================== */}
+            {tab === "visitors" && (
+              <div className="rot-panel">
+                <p style={{ marginTop: 0, color: "rgba(245,246,255,0.55)", fontSize: 14 }}>Not a member of {settings.club_name}? Register here as a visitor — this is open to anyone.</p>
+                <div className="rot-field"><label>Full name</label><input value={visForm.name} onChange={(e) => setVisForm({ ...visForm, name: e.target.value })} placeholder="e.g. Grace Nabatanzi" /></div>
+                <div className="rot-row">
+                  <div className="rot-field"><label>Your club</label><input value={visForm.club} onChange={(e) => setVisForm({ ...visForm, club: e.target.value })} placeholder="e.g. Rotary Club of Entebbe" /></div>
+                  <div className="rot-field"><label>Email</label><input type="email" value={visForm.email} onChange={(e) => setVisForm({ ...visForm, email: e.target.value })} placeholder="you@example.com" /></div>
+                </div>
+                <div className="rot-field">
+                  <label>You are a</label>
+                  <div className="rot-category-picker">
+                    {["Rotarian","Rotaract","Guest"].map((c) => (
+                      <button
+                        type="button"
+                        key={c}
+                        className={`rot-category-btn ${visForm.category === c ? "active" : ""}`}
+                        onClick={() => setVisForm({ ...visForm, category: c })}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                  {(visForm.category === "Rotarian" || visForm.category === "Rotaract") && (
+                    <div className="rot-notice">You'll get a digital make-up card after registering — proof of attendance to take back to your own club.</div>
+                  )}
+                </div>
+                <button type="button" className="rot-btn rot-btn-block" disabled={visBusy} onClick={submitVisitor}>
+                  {visBusy ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16}/>} Register as visitor
+                </button>
+                <div className="rot-notice">{todayVisitors.length} visitor(s) registered today · {visitors.length} all-time.</div>
+
+                <div className="rot-card-lookup">
+                  <button type="button" className="rot-card-lookup-toggle" onClick={() => setShowCardLookup(!showCardLookup)}>
+                    <ClipboardList size={14} /> Already registered? Get your make-up card
+                  </button>
+                  {showCardLookup && (
+                    <div style={{ marginTop: 12 }}>
+                      <div className="rot-field">
+                        <label>Type the name you registered with</label>
+                        <input value={cardLookupQuery} onChange={(e) => setCardLookupQuery(e.target.value)} placeholder="Your full name" />
+                      </div>
+                      {cardLookupQuery.trim() && (
+                        cardLookupResults.length === 0 ? (
+                          <div className="rot-empty">No make-up card found for that name.</div>
+                        ) : (
+                          <div className="rot-list">
+                            {cardLookupResults.map((mk) => (
+                              <div className="rot-person" key={mk.id}>
+                                <div><strong>{mk.name}</strong><div className="meta">Visiting from {mk.buddy_group} · {prettyDate(mk.activity_date)}</div></div>
+                                <button type="button" className="rot-btn ghost" onClick={() => setActiveCard(mk)}>View card</button>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ===================== QR CODE DOOR SIGN ===================== */}
+            {tab === "qr" && (
+              <div className="rot-panel rot-doorsign">
+                {!settings.sign_in_url ? (
+                  <div className="rot-empty">No link set yet. Go to <strong>Admin → Settings</strong> and paste your app's URL.</div>
+                ) : (
+                  <>
+                    <div className="rot-eyebrow">{settings.club_name}</div>
+                    <h2 className="rot-doorsign-h">Scan to Sign In for Fellowship</h2>
+                    <div className="rot-qr-img"><QrSvg text={settings.sign_in_url} size={260} /></div>
+                    <div className="rot-doorsign-sub">{settings.meeting_label}</div>
+                    <button type="button" className="rot-btn ghost" onClick={() => window.print()}><Printer size={15}/> Print this sign</button>
+                  </>
                 )}
               </div>
+            )}
 
-              {matchedMember ? (
-                <div className="rot-notice">You're already registered — <strong>{matchedMember.name}</strong> · {matchedMember.buddy_group} Buddy Group. No action needed here; make-up cards are issued to visiting Rotarians under the Visitors tab.</div>
-              ) : (
-                memberQuery.trim() && memberSuggestions.length === 0 && (
-                  <div style={{ marginTop: 10 }}>
-                    <div className="rot-notice">No member found with that exact name. New here? Register below.</div>
-                    <div style={{ marginTop: 14 }}>
-                      <div className="rot-field"><label>Full name</label><input value={newMember.name} onChange={(e) => setNewMember({ ...newMember, name: e.target.value })} placeholder="Your full name" /></div>
-                      <div className="rot-row">
-                        <div className="rot-field">
-                          <label>Buddy group</label>
-                          {buddyGroups.length === 0 ? (
-                            <select disabled><option>No groups yet — ask your admin</option></select>
-                          ) : (
-                            <select value={newMember.buddyGroup} onChange={(e) => setNewMember({ ...newMember, buddyGroup: e.target.value })}>
-                              <option value="">Choose your group…</option>
-                              {buddyGroups.map((g) => <option key={g.id} value={g.name}>{g.name}</option>)}
-                            </select>
-                          )}
-                        </div>
-                        <div className="rot-field"><label>Email</label><input type="email" value={newMember.email} onChange={(e) => setNewMember({ ...newMember, email: e.target.value })} placeholder="you@example.com" /></div>
-                      </div>
-                      <button type="button" className="rot-btn rot-btn-block" disabled={memberBusy || buddyGroups.length === 0} onClick={registerMember}>{memberBusy ? <Loader2 size={16}/> : <UserPlus size={16}/>} Register as a member</button>
-                    </div>
-                  </div>
-                )
-              )}
-            </div>
-          )}
-
-          {tab === "qr" && (
-            <div className="rot-panel rot-doorsign">
-              {!settings.sign_in_url ? (
-                <div className="rot-empty">No link set yet. Go to <strong>Admin → Settings</strong> and paste your app's URL.</div>
-              ) : (
-                <>
-                  <div className="rot-eyebrow">{settings.club_name}</div>
-                  <h2 className="rot-doorsign-h">Scan to Register or Log a Make-Up</h2>
-                  <div className="rot-qr-img"><QrSvg text={settings.sign_in_url} size={260} /></div>
-                  <div className="rot-doorsign-sub">{settings.meeting_label}</div>
-                  <button type="button" className="rot-btn ghost" onClick={() => window.print()}><Printer size={15}/> Print this sign</button>
-                </>
-              )}
-            </div>
-          )}
-
-          {tab === "admin" && !adminUnlocked && (
-            <div className="rot-panel" style={{ maxWidth: 380, margin: "24px auto 0" }}>
-              <div className="rot-field"><label>Admin PIN</label>
-                <input type="text" inputMode="numeric" autoComplete="off" value={pinInput} onChange={(e) => setPinInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && tryUnlock()} placeholder="e.g. 1905" autoFocus />
+            {/* ===================== ADMIN TAB ===================== */}
+            {tab === "admin" && !adminUnlocked && (
+              <div className="rot-panel" style={{ maxWidth: 380, margin: "24px auto 0" }}>
+                <div className="rot-field"><label>Admin PIN</label>
+                  <input type="text" inputMode="numeric" autoComplete="off" value={pinInput} onChange={(e) => setPinInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && tryUnlock()} placeholder="e.g. 1905" autoFocus />
+                </div>
+                {pinError && <div className="rot-notice" style={{ color: "#FF7B72", borderColor: "rgba(255,123,114,0.4)" }}>{pinError}</div>}
+                <button type="button" className="rot-btn rot-btn-block" style={{ marginTop: 10 }} onClick={tryUnlock}><ShieldCheck size={15}/> Unlock admin</button>
               </div>
-              {pinError && <div className="rot-notice" style={{ color: "#FF7B72", borderColor: "rgba(255,123,114,0.4)" }}>{pinError}</div>}
-              <button type="button" className="rot-btn rot-btn-block" style={{ marginTop: 10 }} onClick={tryUnlock}><ShieldCheck size={15}/> Unlock admin</button>
-            </div>
-          )}
+            )}
 
-          {tab === "admin" && adminUnlocked && (
-            <AdminPanel
-              settings={settings} settingsForm={settingsForm} setSettingsForm={setSettingsForm} saveSettings={saveSettings}
-              buddyGroups={buddyGroups} newGroup={newGroup} setNewGroup={setNewGroup} addGroup={addGroup} removeGroup={removeGroup}
-              members={members} removeMember={removeMember}
-              visitors={visitors} filteredVisitors={filteredVisitors} visitorFilter={visitorFilter} setVisitorFilter={setVisitorFilter}
-              makeups={makeups} setActiveCard={setActiveCard} toggleVerified={toggleVerified}
-              newPin={newPin} setNewPin={setNewPin} changePin={changePin}
-              exportCsv={exportCsv} loadAll={loadAll}
-            />
-          )}
-        </>
-      )}
-      <div className="rot-district-footer">District 9213</div>
+            {tab === "admin" && adminUnlocked && (
+              <AdminPanel
+                settings={settings} settingsForm={settingsForm} setSettingsForm={setSettingsForm} saveSettings={saveSettings}
+                buddyGroups={buddyGroups} newGroup={newGroup} setNewGroup={setNewGroup} addGroup={addGroup} removeGroup={removeGroup}
+                members={members} removeMember={removeMember}
+                visitors={visitors} filteredVisitors={filteredVisitors} visitorFilter={visitorFilter} setVisitorFilter={setVisitorFilter}
+                makeups={makeups} setActiveCard={setActiveCard} toggleVerified={toggleVerified}
+                attendance={attendance} todayAttendance={todayAttendance} removeAttendance={removeAttendance} manualCheckIn={manualCheckIn}
+                newPin={newPin} setNewPin={setNewPin} changePin={changePin}
+                exportCsv={exportCsv} loadAll={loadAll}
+              />
+            )}
+          </>
+        )}
+        <div className="rot-district-footer">District 9213</div>
       </div>
       )}
+
       {toast && <div className={`rot-toast ${toast.kind === "err" ? "err" : ""}`}>{toast.kind === "err" ? <AlertCircle size={16}/> : <CheckCircle2 size={16}/>} {toast.msg}</div>}
 
       {activeCard && (
@@ -677,31 +1009,133 @@ export default function App() {
 function AdminPanel(props) {
   const { settings, settingsForm, setSettingsForm, saveSettings, buddyGroups, newGroup, setNewGroup, addGroup, removeGroup,
     members, removeMember, visitors, filteredVisitors, visitorFilter, setVisitorFilter, makeups, setActiveCard, toggleVerified,
+    attendance, todayAttendance, removeAttendance, manualCheckIn,
     newPin, setNewPin, changePin, exportCsv, loadAll } = props;
   const [section, setSection] = useState("dashboard");
+
+  // Makeup filtering
   const [makeupFilter, setMakeupFilter] = useState("All");
   const filteredMakeups = makeupFilter === "All" ? makeups : makeups.filter((m) => (makeupFilter === "Verified" ? m.verified : !m.verified));
+
+  // Attendance filter
+  const [attDateFilter, setAttDateFilter] = useState("Today");
+  const [attGroupFilter, setAttGroupFilter] = useState("All");
+  const [manualMemberId, setManualMemberId] = useState("");
+
+  const filteredAttendance = useMemo(() => {
+    return attendance.filter((a) => {
+      const matchDate = attDateFilter === "Today" ? a.meeting_date === todayISO() : true;
+      const matchGroup = attGroupFilter === "All" ? true : a.buddy_group === attGroupFilter;
+      return matchDate && matchGroup;
+    });
+  }, [attendance, attDateFilter, attGroupFilter]);
+
+  // Unchecked members for quick manual check-in
+  const uncheckedMembersToday = useMemo(() => {
+    return members.filter((m) => !todayAttendance.some((a) => a.member_id === m.id || a.member_name.toLowerCase() === m.name.toLowerCase()));
+  }, [members, todayAttendance]);
+
   return (
     <div className="rot-panel">
       <div className="rot-subtabs">
-        {[["dashboard","Dashboard",LayoutDashboard],["groups","Buddy Groups",UsersRound],["members","Members",Users],["visitors","Visitors",UserPlus],["makeups","Make-Up Ledger",ClipboardList],["settings","Settings",Settings]].map(([id,label]) => (
+        {[
+          ["dashboard","Dashboard",LayoutDashboard],
+          ["attendance","Attendance",UserCheck],
+          ["groups","Buddy Groups",UsersRound],
+          ["members","Members",Users],
+          ["visitors","Visitors",UserPlus],
+          ["makeups","Make-Up Ledger",ClipboardList],
+          ["settings","Settings",Settings]
+        ].map(([id,label]) => (
           <button key={id} className={`rot-subtab ${section === id ? "active" : ""}`} onClick={() => setSection(id)}>{label}</button>
         ))}
       </div>
 
+      {/* DASHBOARD */}
       {section === "dashboard" && (
         <>
           <div className="rot-stats">
-            <div className="rot-stat"><div className="n">{members.length}</div><div className="l">Members</div></div>
+            <div className="rot-stat"><div className="n">{todayAttendance.length}</div><div className="l">Members Today</div></div>
+            <div className="rot-stat"><div className="n">{visitors.filter((v) => v.visit_date === todayISO()).length}</div><div className="l">Visitors Today</div></div>
+            <div className="rot-stat"><div className="n">{members.length}</div><div className="l">Total Members</div></div>
             <div className="rot-stat"><div className="n">{buddyGroups.length}</div><div className="l">Buddy Groups</div></div>
-            <div className="rot-stat"><div className="n">{visitors.length}</div><div className="l">Visitors (all-time)</div></div>
             <div className="rot-stat"><div className="n">{makeups.length}</div><div className="l">Make-Ups Logged</div></div>
-            <div className="rot-stat"><div className="n">{makeups.filter((m) => !m.verified).length}</div><div className="l">Pending Verification</div></div>
           </div>
-          <button type="button" className="rot-btn ghost" onClick={loadAll}><RotateCcw size={15}/> Refresh</button>
+          <button type="button" className="rot-btn ghost" onClick={loadAll}><RotateCcw size={15}/> Refresh Data</button>
         </>
       )}
 
+      {/* ATTENDANCE LEDGER */}
+      {section === "attendance" && (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              {["Today", "All Time"].map((f) => (
+                <button key={f} type="button" className={`rot-subtab ${attDateFilter === f ? "active" : ""}`} onClick={() => setAttDateFilter(f)}>
+                  {f}
+                </button>
+              ))}
+              <select
+                value={attGroupFilter}
+                onChange={(e) => setAttGroupFilter(e.target.value)}
+                style={{ width: "auto", padding: "6px 12px", borderRadius: 20, background: "rgba(245,246,255,0.04)", color: "var(--paper)", border: "1px solid var(--line)", fontSize: 13 }}
+              >
+                <option value="All">All Groups</option>
+                {buddyGroups.map((g) => <option key={g.id} value={g.name}>{g.name}</option>)}
+              </select>
+            </div>
+            <button type="button" className="rot-btn ghost" onClick={() => exportCsv("attendance")}><Download size={15}/> Export CSV</button>
+          </div>
+
+          {/* Quick manual check-in */}
+          <div className="rot-notice" style={{ marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Manual Member Check-In (For Today)</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <select
+                value={manualMemberId}
+                onChange={(e) => setManualMemberId(e.target.value)}
+                style={{ flex: 1, minWidth: 200 }}
+              >
+                <option value="">Select an unregistered member…</option>
+                {uncheckedMembersToday.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name} ({m.buddy_group})</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="rot-btn green"
+                disabled={!manualMemberId}
+                onClick={() => { manualCheckIn(manualMemberId); setManualMemberId(""); }}
+              >
+                <UserCheck size={14} /> Check In
+              </button>
+            </div>
+          </div>
+
+          {filteredAttendance.length === 0 ? (
+            <div className="rot-empty">No attendance records found for this filter.</div>
+          ) : (
+            <div className="rot-list">
+              {filteredAttendance.map((a) => (
+                <div className="rot-person" key={a.id}>
+                  <div>
+                    <strong>{a.member_name}</strong>
+                    <div className="meta">{a.buddy_group} · Meeting: {prettyDate(a.meeting_date)}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span className="rot-badge rot-badge-green"><Check size={12}/> Present</span>
+                    <button type="button" className="rot-btn danger" onClick={() => removeAttendance(a)} title="Remove entry">
+                      <Trash2 size={14}/>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* BUDDY GROUPS */}
       {section === "groups" && (
         <>
           <div className="rot-row">
@@ -712,13 +1146,19 @@ function AdminPanel(props) {
             <div className="rot-list">
               {buddyGroups.map((g) => {
                 const count = members.filter((m) => m.buddy_group === g.name).length;
-                return <div className="rot-person" key={g.id}><div><strong>{g.name}</strong><div className="meta">{count} member(s)</div></div><button type="button" className="rot-btn danger" onClick={() => removeGroup(g)}><Trash2 size={14}/></button></div>;
+                return (
+                  <div className="rot-person" key={g.id}>
+                    <div><strong>{g.name}</strong><div className="meta">{count} member(s)</div></div>
+                    <button type="button" className="rot-btn danger" onClick={() => removeGroup(g)}><Trash2 size={14}/></button>
+                  </div>
+                );
               })}
             </div>
           )}
         </>
       )}
 
+      {/* MEMBERS */}
       {section === "members" && (
         <>
           <button type="button" className="rot-btn ghost" onClick={() => exportCsv("members")} style={{ marginBottom: 14 }}><Download size={15}/> Export members CSV</button>
@@ -730,6 +1170,7 @@ function AdminPanel(props) {
         </>
       )}
 
+      {/* VISITORS */}
       {section === "visitors" && (
         <>
           <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
@@ -744,6 +1185,7 @@ function AdminPanel(props) {
         </>
       )}
 
+      {/* MAKEUPS */}
       {section === "makeups" && (
         <>
           <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
@@ -767,6 +1209,7 @@ function AdminPanel(props) {
         </>
       )}
 
+      {/* SETTINGS */}
       {section === "settings" && (
         <>
           <div className="rot-field"><label>Club name</label><input value={settingsForm.club_name} onChange={(e) => setSettingsForm({ ...settingsForm, club_name: e.target.value })} /></div>
