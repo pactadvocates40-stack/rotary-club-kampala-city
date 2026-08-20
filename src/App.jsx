@@ -78,7 +78,7 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 3) {
   lines.forEach((l, i) => ctx.fillText(l, x, y + i * lineHeight));
   return y + lines.length * lineHeight;
 }
-function renderCard(canvas, { clubName, name, buddyGroup, detail, date, id }) {
+function renderCard(canvas, { clubName, name, homeClub, detail, date, id }) {
   const W = 1050, H = 600;
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d");
@@ -107,8 +107,8 @@ function renderCard(canvas, { clubName, name, buddyGroup, detail, date, id }) {
   ctx.font = "800 15px 'Space Grotesk', sans-serif"; ctx.fillText("ROTARY", stubX / 2, H / 2 - 64);
   ctx.font = "600 11px Inter, sans-serif"; ctx.fillText("MAKE-UP", stubX / 2, H / 2 - 47);
   ctx.fillStyle = AMBER; ctx.font = "italic 700 13px Inter, sans-serif"; ctx.fillText("“SERVICE ABOVE SELF”", stubX / 2, H / 2 + 40);
-  ctx.font = "600 13px Inter, sans-serif"; ctx.fillStyle = "rgba(245,246,255,0.65)";
-  ctx.fillText(buddyGroup ? `${buddyGroup} Buddy Group` : "", stubX / 2, H / 2 + 68);
+  ctx.font = "600 12px Inter, sans-serif"; ctx.fillStyle = "rgba(245,246,255,0.65)";
+  if (homeClub) wrapText(ctx, `Visiting from ${homeClub}`, stubX / 2, H / 2 + 68, stubX - 40, 16, 2);
 
   const padX = stubX + 60;
   ctx.textAlign = "left";
@@ -179,7 +179,7 @@ export default function App() {
   useEffect(() => {
     if (activeCard && canvasRef.current) {
       renderCard(canvasRef.current, {
-        clubName: settings.club_name, name: activeCard.name, buddyGroup: activeCard.buddy_group,
+        clubName: settings.club_name, name: activeCard.name, homeClub: activeCard.buddy_group,
         detail: activeCard.detail, date: activeCard.activity_date, id: activeCard.card_id,
       });
     }
@@ -195,11 +195,29 @@ export default function App() {
     const { data, error } = await supabase.from("visitors").insert({
       name, home_club: club, email, category: visForm.category, visit_date: todayISO(),
     }).select().single();
-    setVisBusy(false);
-    if (error) { flash("Could not save — try again.", "err"); return; }
+    if (error) { setVisBusy(false); flash("Could not save — try again.", "err"); return; }
     setVisitors([data, ...visitors]);
+
+    if (visForm.category === "Rotarian" || visForm.category === "Rotaract") {
+      const record = {
+        name, email, buddy_group: club, // "buddy_group" column reused to hold the visitor's home club
+        detail: `Attended ${settings.club_name}'s ${settings.meeting_label}`,
+        activity_date: todayISO(), card_id: cardId(),
+      };
+      const mk = await supabase.from("makeups").insert(record).select().single();
+      setVisBusy(false);
+      if (!mk.error) {
+        setMakeups([mk.data, ...makeups]);
+        setActiveCard(mk.data);
+        flash(`Welcome, ${name}! Here's your make-up card to take back to ${club}.`);
+      } else {
+        flash(`Welcome, ${name}! (Card couldn't be generated — let your admin know.)`, "err");
+      }
+    } else {
+      setVisBusy(false);
+      flash(`Welcome, ${name}! Thanks for visiting ${settings.club_name}.`);
+    }
     setVisForm({ name: "", club: "", email: "", category: "Guest" });
-    flash(`Welcome, ${name}! Thanks for visiting ${settings.club_name}.`);
   };
 
   // ---- Members ----
@@ -222,24 +240,6 @@ export default function App() {
     setNewMember({ name: "", buddyGroup: "", email: "" });
     flash(`Welcome to the club, ${name}!`);
   };
-
-  const [makeupForm, setMakeupForm] = useState({ detail: "", date: todayISO() });
-  const [makeupBusy, setMakeupBusy] = useState(false);
-  const logMakeup = async () => {
-    if (!matchedMember) return;
-    const detail = makeupForm.detail.trim();
-    if (!detail) { flash("Describe what you did for your make-up.", "err"); return; }
-    setMakeupBusy(true);
-    const record = { name: matchedMember.name, email: matchedMember.email, buddy_group: matchedMember.buddy_group, detail, activity_date: makeupForm.date || todayISO(), card_id: cardId() };
-    const { data, error } = await supabase.from("makeups").insert(record).select().single();
-    setMakeupBusy(false);
-    if (error) { flash("Could not save — try again.", "err"); return; }
-    setMakeups([data, ...makeups]);
-    setMakeupForm({ detail: "", date: todayISO() });
-    setActiveCard(data);
-    flash("Make-up logged — your card is ready below.");
-  };
-  const myMakeups = matchedMember ? makeups.filter((m) => m.email === matchedMember.email) : [];
 
   const downloadCard = () => {
     if (!canvasRef.current) return;
@@ -303,7 +303,7 @@ export default function App() {
   const exportCsv = (which) => {
     if (which === "members") downloadBlob("rotary-members.csv", csv([["Name","Buddy Group","Email","Registered At"], ...members.map((m) => [m.name, m.buddy_group, m.email, m.registered_at])]));
     else if (which === "visitors") downloadBlob("rotary-visitors.csv", csv([["Name","Home Club","Email","Category","Date","Registered At"], ...visitors.map((v) => [v.name, v.home_club, v.email, v.category, v.visit_date, v.registered_at])]));
-    else downloadBlob("rotary-makeups.csv", csv([["Name","Buddy Group","Email","Detail","Date","Verified","Card ID","Logged At"], ...makeups.map((m) => [m.name, m.buddy_group, m.email, m.detail, m.activity_date, m.verified ? "Yes" : "No", m.card_id, m.logged_at])]));
+    else downloadBlob("rotary-makeups.csv", csv([["Name","Home Club","Email","Detail","Date","Verified","Card ID","Logged At"], ...makeups.map((m) => [m.name, m.buddy_group, m.email, m.detail, m.activity_date, m.verified ? "Yes" : "No", m.card_id, m.logged_at])]));
   };
 
   const todayVisitors = visitors.filter((v) => v.visit_date === todayISO());
@@ -505,6 +505,9 @@ export default function App() {
                     <label key={c}><input type="radio" name="cat" checked={visForm.category === c} onChange={() => setVisForm({ ...visForm, category: c })} />{c}</label>
                   ))}
                 </div>
+                {(visForm.category === "Rotarian" || visForm.category === "Rotaract") && (
+                  <div className="rot-notice">You'll get a make-up card after registering — proof of attendance to take back to your own club.</div>
+                )}
               </div>
               <button type="button" className="rot-btn rot-btn-block" disabled={visBusy} onClick={submitVisitor}>{visBusy ? <Loader2 size={16}/> : <UserPlus size={16}/>} Register as visitor</button>
               <div className="rot-notice">{todayVisitors.length} visitor(s) registered today · {visitors.length} all-time.</div>
@@ -531,30 +534,7 @@ export default function App() {
               </div>
 
               {matchedMember ? (
-                <>
-                  <div className="rot-notice">Welcome back, <strong>{matchedMember.name}</strong> · {matchedMember.buddy_group} Buddy Group</div>
-                  <div style={{ marginTop: 16 }}>
-                    <div className="rot-row"><div className="rot-field"><label>Date of activity</label><input type="date" value={makeupForm.date} onChange={(e) => setMakeupForm({ ...makeupForm, date: e.target.value })} /></div></div>
-                    <div className="rot-field"><label>What did you do for your make-up?</label><textarea rows={3} value={makeupForm.detail} onChange={(e) => setMakeupForm({ ...makeupForm, detail: e.target.value })} placeholder="e.g. Attended Rotary Club of Jinja's Tuesday meeting" /></div>
-                    <button type="button" className="rot-btn gold rot-btn-block" disabled={makeupBusy} onClick={logMakeup}>{makeupBusy ? <Loader2 size={16}/> : <ClipboardList size={16}/>} Log make-up &amp; get card</button>
-                  </div>
-                  {myMakeups.length > 0 && (
-                    <>
-                      <h4 style={{ marginTop: 24 }}>Your past make-ups</h4>
-                      <div className="rot-list">
-                        {myMakeups.map((mk) => (
-                          <div className="rot-person" key={mk.id}>
-                            <div><strong>{prettyDate(mk.activity_date)}</strong><div className="meta">{mk.detail}</div></div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <span className={`rot-badge ${mk.verified ? "rot-badge-verified" : "rot-badge-pending"}`}>{mk.verified ? "Verified" : "Pending"}</span>
-                              <button type="button" className="rot-btn ghost" onClick={() => setActiveCard(mk)}>View card</button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </>
+                <div className="rot-notice">You're already registered — <strong>{matchedMember.name}</strong> · {matchedMember.buddy_group} Buddy Group. No action needed here; make-up cards are issued to visiting Rotarians under the Visitors tab.</div>
               ) : (
                 memberQuery.trim() && memberSuggestions.length === 0 && (
                   <div style={{ marginTop: 10 }}>
@@ -573,7 +553,7 @@ export default function App() {
                             </select>
                           )}
                         </div>
-                        <div className="rot-field"><label>Email (make-up cards go here)</label><input type="email" value={newMember.email} onChange={(e) => setNewMember({ ...newMember, email: e.target.value })} placeholder="you@example.com" /></div>
+                        <div className="rot-field"><label>Email</label><input type="email" value={newMember.email} onChange={(e) => setNewMember({ ...newMember, email: e.target.value })} placeholder="you@example.com" /></div>
                       </div>
                       <button type="button" className="rot-btn rot-btn-block" disabled={memberBusy || buddyGroups.length === 0} onClick={registerMember}>{memberBusy ? <Loader2 size={16}/> : <UserPlus size={16}/>} Register as a member</button>
                     </div>
@@ -727,7 +707,7 @@ function AdminPanel(props) {
           {filteredMakeups.length === 0 ? <div className="rot-empty">No make-ups match this filter.</div> : (
             <div className="rot-list">{filteredMakeups.map((mk) => (
               <div className="rot-person" key={mk.id}>
-                <div><strong>{mk.name}</strong><div className="meta">{mk.buddy_group} · {prettyDate(mk.activity_date)} · {mk.detail}</div></div>
+                <div><strong>{mk.name}</strong><div className="meta">Visiting from {mk.buddy_group} · {prettyDate(mk.activity_date)} · {mk.detail}</div></div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span className={`rot-badge ${mk.verified ? "rot-badge-verified" : "rot-badge-pending"}`}>{mk.verified ? "Verified" : "Pending"}</span>
                   <button type="button" className="rot-btn ghost" onClick={() => setActiveCard(mk)}>View card</button>
