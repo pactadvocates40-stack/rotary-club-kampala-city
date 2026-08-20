@@ -4,8 +4,9 @@ import {
   AlertCircle, Loader2, RotateCcw, QrCode, Printer, Trash2, Plus,
   LayoutDashboard, UsersRound, ClipboardList, Settings, X,
   Trophy, Calendar, Award, Check, UserCheck, TrendingUp, Sparkles,
-  BarChart3, Clock, ChevronRight
+  BarChart3, Clock, ChevronRight, FileText, Heart, Send, Copy
 } from "lucide-react";
+import jsPDF from "jspdf";
 import { supabase } from "./supabaseClient";
 
 // ---------- embedded QR encoder (kazuhikoarase/qrcode-generator, MIT) ----------
@@ -80,56 +81,116 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 3) {
   lines.forEach((l, i) => ctx.fillText(l, x, y + i * lineHeight));
   return y + lines.length * lineHeight;
 }
-function renderCard(canvas, { clubName, name, homeClub, detail, date, id }) {
+
+// Render either a Rotarian Make-Up Card or a Guest Fellowship Certificate
+function renderCard(canvas, { clubName, name, homeClub, detail, date, id, isGuest = false }) {
   const W = 1050, H = 600;
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d");
-  const INK = "#090C16", INK2 = "#131A33", BLUE = "#3D6BFF", CORAL = "#FF6B4A", AMBER = "#FFB020", PAPER = "#F5F6FF";
 
-  const grad = ctx.createLinearGradient(0, 0, W, H);
-  grad.addColorStop(0, INK); grad.addColorStop(0.55, INK2); grad.addColorStop(1, "#1B2550");
-  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+  if (isGuest) {
+    // ---- GUEST CERTIFICATE OF FELLOWSHIP THEME (Deep Emerald & Gold) ----
+    const INK = "#041416", INK2 = "#082522", EMERALD = "#10B981", GOLD = "#F59E0B", GOLD_LIGHT = "#FDE68A", PAPER = "#F8FAFC";
+    const grad = ctx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, INK); grad.addColorStop(0.5, INK2); grad.addColorStop(1, "#0B3830");
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
 
-  drawBurst(ctx, W - 120, H - 90, 40, 260, 40, BLUE, 0.14);
-  drawBurst(ctx, W - 120, H - 90, 40, 180, 40, CORAL, 0.10);
+    drawBurst(ctx, W - 130, H - 90, 45, 270, 40, GOLD, 0.16);
+    drawBurst(ctx, W - 130, H - 90, 45, 180, 40, EMERALD, 0.12);
 
-  const borderGrad = ctx.createLinearGradient(0, 0, W, 0);
-  borderGrad.addColorStop(0, BLUE); borderGrad.addColorStop(1, CORAL);
-  ctx.strokeStyle = borderGrad; ctx.lineWidth = 5; ctx.strokeRect(20, 20, W - 40, H - 40);
+    const borderGrad = ctx.createLinearGradient(0, 0, W, 0);
+    borderGrad.addColorStop(0, GOLD); borderGrad.addColorStop(0.5, GOLD_LIGHT); borderGrad.addColorStop(1, EMERALD);
+    ctx.strokeStyle = borderGrad; ctx.lineWidth = 5; ctx.strokeRect(22, 22, W - 44, H - 44);
+    ctx.lineWidth = 1.5; ctx.strokeRect(30, 30, W - 60, H - 60);
 
-  const stubX = 300;
-  ctx.setLineDash([2, 10]); ctx.strokeStyle = "rgba(245,246,255,0.25)"; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(stubX, 24); ctx.lineTo(stubX, H - 24); ctx.stroke(); ctx.setLineDash([]);
+    const stubX = 310;
+    ctx.setLineDash([3, 8]); ctx.strokeStyle = "rgba(253,230,138,0.3)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(stubX, 32); ctx.lineTo(stubX, H - 32); ctx.stroke(); ctx.setLineDash([]);
 
-  const badgeGrad = ctx.createLinearGradient(0, H / 2 - 130, 0, H / 2 + 30);
-  badgeGrad.addColorStop(0, BLUE); badgeGrad.addColorStop(1, CORAL);
-  drawBurst(ctx, stubX / 2, H / 2 - 60, 20, 62, 24, AMBER, 0.9);
-  ctx.fillStyle = badgeGrad; ctx.beginPath(); ctx.arc(stubX / 2, H / 2 - 60, 38, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = PAPER; ctx.textAlign = "center";
-  ctx.font = "800 15px 'Space Grotesk', sans-serif"; ctx.fillText("ROTARY", stubX / 2, H / 2 - 64);
-  ctx.font = "600 11px Inter, sans-serif"; ctx.fillText("MAKE-UP", stubX / 2, H / 2 - 47);
-  ctx.fillStyle = AMBER; ctx.font = "italic 700 13px Inter, sans-serif"; ctx.fillText("“SERVICE ABOVE SELF”", stubX / 2, H / 2 + 40);
-  ctx.font = "600 12px Inter, sans-serif"; ctx.fillStyle = "rgba(245,246,255,0.65)";
-  if (homeClub) wrapText(ctx, `Visiting from ${homeClub}`, stubX / 2, H / 2 + 68, stubX - 40, 16, 2);
+    const badgeGrad = ctx.createLinearGradient(0, H / 2 - 130, 0, H / 2 + 30);
+    badgeGrad.addColorStop(0, GOLD); badgeGrad.addColorStop(1, "#D97706");
+    drawBurst(ctx, stubX / 2, H / 2 - 60, 22, 66, 28, GOLD_LIGHT, 0.9);
+    ctx.fillStyle = badgeGrad; ctx.beginPath(); ctx.arc(stubX / 2, H / 2 - 60, 42, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#041416"; ctx.textAlign = "center";
+    ctx.font = "800 13px 'Space Grotesk', sans-serif"; ctx.fillText("ROTARY", stubX / 2, H / 2 - 65);
+    ctx.font = "700 11px Inter, sans-serif"; ctx.fillText("HONORED GUEST", stubX / 2, H / 2 - 48);
 
-  const padX = stubX + 60;
-  ctx.textAlign = "left";
-  ctx.fillStyle = CORAL; ctx.font = "800 16px 'Space Grotesk', sans-serif"; ctx.fillText(clubName.toUpperCase(), padX, 96);
-  ctx.fillStyle = PAPER; ctx.font = "800 46px 'Space Grotesk', sans-serif"; ctx.fillText("Make-Up Card", padX, 158);
-  const lineGrad = ctx.createLinearGradient(padX, 0, W - 60, 0);
-  lineGrad.addColorStop(0, BLUE); lineGrad.addColorStop(1, CORAL);
-  ctx.strokeStyle = lineGrad; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(padX, 182); ctx.lineTo(W - 60, 182); ctx.stroke();
+    ctx.fillStyle = GOLD_LIGHT; ctx.font = "italic 700 13px Inter, sans-serif"; ctx.fillText("“SERVICE ABOVE SELF”", stubX / 2, H / 2 + 42);
+    ctx.font = "500 12px Inter, sans-serif"; ctx.fillStyle = "rgba(248,250,252,0.75)";
+    wrapText(ctx, "You are warmly welcome in our Rotary family. See you again next week!", stubX / 2, H / 2 + 70, stubX - 44, 17, 3);
 
-  ctx.fillStyle = "rgba(245,246,255,0.55)"; ctx.font = "700 13px Inter, sans-serif"; ctx.fillText("ISSUED TO", padX, 228);
-  ctx.fillStyle = PAPER; ctx.font = "700 34px 'Space Grotesk', sans-serif"; ctx.fillText(name, padX, 268);
-  ctx.fillStyle = "rgba(245,246,255,0.55)"; ctx.font = "700 13px Inter, sans-serif"; ctx.fillText("ACTIVITY / MAKE-UP DETAIL", padX, 323);
-  ctx.fillStyle = PAPER; ctx.font = "500 21px Inter, sans-serif"; wrapText(ctx, detail || "—", padX, 351, W - padX - 60, 27, 3);
-  ctx.fillStyle = "rgba(245,246,255,0.55)"; ctx.font = "700 13px Inter, sans-serif"; ctx.fillText("DATE", padX, 458);
-  ctx.fillStyle = PAPER; ctx.font = "600 20px Inter, sans-serif"; ctx.fillText(prettyDate(date), padX, 484);
+    const padX = stubX + 54;
+    ctx.textAlign = "left";
+    ctx.fillStyle = GOLD; ctx.font = "800 15px 'Space Grotesk', sans-serif"; ctx.fillText(clubName.toUpperCase(), padX, 88);
+    ctx.fillStyle = PAPER; ctx.font = "800 42px 'Space Grotesk', sans-serif"; ctx.fillText("Certificate of Fellowship", padX, 142);
+    
+    ctx.fillStyle = "rgba(248,250,252,0.65)"; ctx.font = "600 14px Inter, sans-serif";
+    ctx.fillText("PRESENTED WITH SINCERE APPRECIATION TO", padX, 184);
 
-  ctx.fillStyle = "rgba(245,246,255,0.4)"; ctx.font = "500 13px 'JetBrains Mono', monospace";
-  ctx.fillText(`CARD ID  ${id}`, padX, H - 55); ctx.fillText("Valid as proof of make-up attendance", padX, H - 34);
+    const lineGrad = ctx.createLinearGradient(padX, 0, W - 60, 0);
+    lineGrad.addColorStop(0, GOLD); lineGrad.addColorStop(1, EMERALD);
+    ctx.strokeStyle = lineGrad; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(padX, 196); ctx.lineTo(W - 60, 196); ctx.stroke();
+
+    ctx.fillStyle = GOLD_LIGHT; ctx.font = "800 36px 'Space Grotesk', sans-serif"; ctx.fillText(name, padX, 248);
+
+    ctx.fillStyle = PAPER; ctx.font = "500 18px Inter, sans-serif";
+    wrapText(ctx, `Thank you for fellowshipping with us during our ${detail || "Weekly Fellowship Meeting"}. We deeply appreciate your presence and warmly invite you to make this your fellowship home!`, padX, 290, W - padX - 60, 26, 4);
+
+    ctx.fillStyle = "rgba(248,250,252,0.55)"; ctx.font = "700 12px Inter, sans-serif"; ctx.fillText("DATE OF FELLOWSHIP", padX, 460);
+    ctx.fillStyle = PAPER; ctx.font = "600 18px Inter, sans-serif"; ctx.fillText(prettyDate(date), padX, 485);
+
+    ctx.fillStyle = "rgba(248,250,252,0.45)"; ctx.font = "500 13px 'JetBrains Mono', monospace";
+    ctx.fillText(`CERTIFICATE ID  ${id}`, padX, H - 48); ctx.fillText("Official Guest Certificate of Appreciation", padX, H - 30);
+
+  } else {
+    // ---- ROTARIAN / ROTARACT MAKE-UP CARD THEME (Rotary Blue & Coral) ----
+    const INK = "#090C16", INK2 = "#131A33", BLUE = "#3D6BFF", CORAL = "#FF6B4A", AMBER = "#FFB020", PAPER = "#F5F6FF";
+    const grad = ctx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, INK); grad.addColorStop(0.55, INK2); grad.addColorStop(1, "#1B2550");
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+
+    drawBurst(ctx, W - 120, H - 90, 40, 260, 40, BLUE, 0.14);
+    drawBurst(ctx, W - 120, H - 90, 40, 180, 40, CORAL, 0.10);
+
+    const borderGrad = ctx.createLinearGradient(0, 0, W, 0);
+    borderGrad.addColorStop(0, BLUE); borderGrad.addColorStop(1, CORAL);
+    ctx.strokeStyle = borderGrad; ctx.lineWidth = 5; ctx.strokeRect(20, 20, W - 40, H - 40);
+
+    const stubX = 300;
+    ctx.setLineDash([2, 10]); ctx.strokeStyle = "rgba(245,246,255,0.25)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(stubX, 24); ctx.lineTo(stubX, H - 24); ctx.stroke(); ctx.setLineDash([]);
+
+    const badgeGrad = ctx.createLinearGradient(0, H / 2 - 130, 0, H / 2 + 30);
+    badgeGrad.addColorStop(0, BLUE); badgeGrad.addColorStop(1, CORAL);
+    drawBurst(ctx, stubX / 2, H / 2 - 60, 20, 62, 24, AMBER, 0.9);
+    ctx.fillStyle = badgeGrad; ctx.beginPath(); ctx.arc(stubX / 2, H / 2 - 60, 38, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = PAPER; ctx.textAlign = "center";
+    ctx.font = "800 15px 'Space Grotesk', sans-serif"; ctx.fillText("ROTARY", stubX / 2, H / 2 - 64);
+    ctx.font = "600 11px Inter, sans-serif"; ctx.fillText("MAKE-UP", stubX / 2, H / 2 - 47);
+    ctx.fillStyle = AMBER; ctx.font = "italic 700 13px Inter, sans-serif"; ctx.fillText("“SERVICE ABOVE SELF”", stubX / 2, H / 2 + 40);
+    ctx.font = "600 12px Inter, sans-serif"; ctx.fillStyle = "rgba(245,246,255,0.65)";
+    if (homeClub) wrapText(ctx, `Visiting from ${homeClub}`, stubX / 2, H / 2 + 68, stubX - 40, 16, 2);
+
+    const padX = stubX + 60;
+    ctx.textAlign = "left";
+    ctx.fillStyle = CORAL; ctx.font = "800 16px 'Space Grotesk', sans-serif"; ctx.fillText(clubName.toUpperCase(), padX, 96);
+    ctx.fillStyle = PAPER; ctx.font = "800 46px 'Space Grotesk', sans-serif"; ctx.fillText("Make-Up Card", padX, 158);
+    const lineGrad = ctx.createLinearGradient(padX, 0, W - 60, 0);
+    lineGrad.addColorStop(0, BLUE); lineGrad.addColorStop(1, CORAL);
+    ctx.strokeStyle = lineGrad; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(padX, 182); ctx.lineTo(W - 60, 182); ctx.stroke();
+
+    ctx.fillStyle = "rgba(245,246,255,0.55)"; ctx.font = "700 13px Inter, sans-serif"; ctx.fillText("ISSUED TO", padX, 228);
+    ctx.fillStyle = PAPER; ctx.font = "700 34px 'Space Grotesk', sans-serif"; ctx.fillText(name, padX, 268);
+    ctx.fillStyle = "rgba(245,246,255,0.55)"; ctx.font = "700 13px Inter, sans-serif"; ctx.fillText("ACTIVITY / MAKE-UP DETAIL", padX, 323);
+    ctx.fillStyle = PAPER; ctx.font = "500 21px Inter, sans-serif"; wrapText(ctx, detail || "—", padX, 351, W - padX - 60, 27, 3);
+    ctx.fillStyle = "rgba(245,246,255,0.55)"; ctx.font = "700 13px Inter, sans-serif"; ctx.fillText("DATE", padX, 458);
+    ctx.fillStyle = PAPER; ctx.font = "600 20px Inter, sans-serif"; ctx.fillText(prettyDate(date), padX, 484);
+
+    ctx.fillStyle = "rgba(245,246,255,0.4)"; ctx.font = "500 13px 'JetBrains Mono', monospace";
+    ctx.fillText(`CARD ID  ${id}`, padX, H - 55); ctx.fillText("Valid as proof of make-up attendance", padX, H - 34);
+  }
 }
 
 // ---------- main ----------
@@ -139,7 +200,7 @@ export default function App() {
   const [view, setView] = useState("landing"); // "landing" | "app"
   const enterApp = (t) => { setTab(t); setView("app"); };
   const [toast, setToast] = useState(null);
-  const flash = (msg, kind = "ok") => { setToast({ msg, kind }); setTimeout(() => setToast(null), 3200); };
+  const flash = (msg, kind = "ok") => { setToast({ msg, kind }); setTimeout(() => setToast(null), 3500); };
 
   const [settings, setSettings] = useState({ club_name: "Rotary Club of Kampala City", meeting_label: "Weekly Fellowship Meeting", sign_in_url: "", admin_pin: "1905" });
   const [settingsForm, setSettingsForm] = useState(settings);
@@ -183,9 +244,15 @@ export default function App() {
 
   useEffect(() => {
     if (activeCard && canvasRef.current) {
+      const isGuest = activeCard.card_type === "guest_certificate" || activeCard.category === "Guest";
       renderCard(canvasRef.current, {
-        clubName: settings.club_name, name: activeCard.name, homeClub: activeCard.buddy_group,
-        detail: activeCard.detail, date: activeCard.activity_date, id: activeCard.card_id,
+        clubName: settings.club_name,
+        name: activeCard.name,
+        homeClub: activeCard.buddy_group,
+        detail: activeCard.detail,
+        date: activeCard.activity_date,
+        id: activeCard.card_id,
+        isGuest,
       });
     }
   }, [activeCard, settings]);
@@ -213,7 +280,6 @@ export default function App() {
         groupAttendanceRecords = attendance.filter((a) => a.buddy_group === g.name);
       }
 
-      // Unique attendees for % rate calculation in current view
       const uniqueAttendees = new Set(groupAttendanceRecords.map((a) => a.member_name.toLowerCase())).size;
       const rate = totalGroupMembers > 0 ? Math.min(100, Math.round((uniqueAttendees / totalGroupMembers) * 100)) : 0;
 
@@ -239,7 +305,7 @@ export default function App() {
     return todayGroups.length > 0 && todayGroups[0].gAtt > 0 ? todayGroups[0] : null;
   }, [buddyGroups, members, attendance]);
 
-  // ---- Visitors ----
+  // ---- Visitors & Guest Certificates ----
   const [visForm, setVisForm] = useState({ name: "", club: "", email: "", category: "Guest" });
   const [showCardLookup, setShowCardLookup] = useState(false);
   const [cardLookupQuery, setCardLookupQuery] = useState("");
@@ -247,35 +313,58 @@ export default function App() {
     ? makeups.filter((m) => m.name.toLowerCase().includes(cardLookupQuery.trim().toLowerCase()))
     : [];
   const [visBusy, setVisBusy] = useState(false);
+
   const submitVisitor = async () => {
-    const name = visForm.name.trim(), club = visForm.club.trim(), email = visForm.email.trim().toLowerCase();
-    if (!name || !club || !emailOk(email)) { flash("Please fill in name, club, and a valid email.", "err"); return; }
+    const name = visForm.name.trim();
+    const club = visForm.category === "Guest" ? (visForm.club.trim() || "Guest") : visForm.club.trim();
+    const email = visForm.email.trim().toLowerCase();
+
+    if (!name || !emailOk(email)) {
+      flash("Please provide your name and a valid email address.", "err");
+      return;
+    }
+    if (visForm.category !== "Guest" && !club) {
+      flash("Please enter your home club.", "err");
+      return;
+    }
+
     setVisBusy(true);
-    const { data, error } = await supabase.from("visitors").insert({
+    const { data: vData, error: vErr } = await supabase.from("visitors").insert({
       name, home_club: club, email, category: visForm.category, visit_date: todayISO(),
     }).select().single();
-    if (error) { setVisBusy(false); flash("Could not save — try again.", "err"); return; }
-    setVisitors([data, ...visitors]);
 
-    if (visForm.category === "Rotarian" || visForm.category === "Rotaract") {
-      const record = {
-        name, email, buddy_group: club,
-        detail: `Attended ${settings.club_name}'s ${settings.meeting_label}`,
-        activity_date: todayISO(), card_id: cardId(),
-      };
-      const mk = await supabase.from("makeups").insert(record).select().single();
+    if (vErr) {
       setVisBusy(false);
-      if (!mk.error) {
-        setMakeups([mk.data, ...makeups]);
-        setActiveCard(mk.data);
-        flash(`Welcome, ${name}! Here's your make-up card to take back to ${club}.`);
-      } else {
-        flash(`Welcome, ${name}! (Card couldn't be generated — let your admin know.)`, "err");
-      }
-    } else {
-      setVisBusy(false);
-      flash(`Welcome, ${name}! Thanks for visiting ${settings.club_name}.`);
+      flash("Could not save — please try again.", "err");
+      return;
     }
+    setVisitors([vData, ...visitors]);
+
+    const isGuest = visForm.category === "Guest";
+    const record = {
+      name,
+      email,
+      buddy_group: club,
+      detail: isGuest ? `Honored Guest at ${settings.club_name}'s ${settings.meeting_label}` : `Attended ${settings.club_name}'s ${settings.meeting_label}`,
+      activity_date: todayISO(),
+      card_id: cardId(),
+    };
+
+    const mk = await supabase.from("makeups").insert(record).select().single();
+    setVisBusy(false);
+
+    const fullRecord = mk.data ? { ...mk.data, category: visForm.category, card_type: isGuest ? "guest_certificate" : "makeup" } : { ...record, category: visForm.category };
+    if (!mk.error) {
+      setMakeups([fullRecord, ...makeups]);
+    }
+    setActiveCard(fullRecord);
+
+    if (isGuest) {
+      flash(`Welcome, ${name}! Here is your official Certificate of Fellowship.`);
+    } else {
+      flash(`Welcome, ${name}! Here is your Make-Up Card to take back to ${club}.`);
+    }
+
     setVisForm({ name: "", club: "", email: "", category: "Guest" });
   };
 
@@ -354,17 +443,61 @@ export default function App() {
     flash(`Welcome to the club & fellowship, ${name}! 🎉`);
   };
 
-  const downloadCard = () => {
+  // ---- PDF & Image Download with Custom Person Name ----
+  const downloadPdfCard = () => {
     if (!canvasRef.current || !activeCard) return;
+    const isGuest = activeCard.card_type === "guest_certificate" || activeCard.category === "Guest";
+    const cleanName = (activeCard.name || "Attendee").replace(/[/\\?%*:|"<>]/g, "").trim();
+    const docTitle = isGuest ? `Rotary Guest Certificate - ${cleanName}` : `Rotary Make-Up - ${cleanName}`;
+
+    try {
+      const imgData = canvasRef.current.toDataURL("image/png", 1.0);
+      const pdf = new jsPDF({
+        orientation: "landscape",
+        unit: "px",
+        format: [1050, 600],
+      });
+      pdf.addImage(imgData, "PNG", 0, 0, 1050, 600);
+      pdf.save(`${docTitle}.pdf`);
+      flash(`Downloaded "${docTitle}.pdf"`);
+    } catch (e) {
+      const link = document.createElement("a");
+      link.download = `${docTitle}.png`;
+      link.href = canvasRef.current.toDataURL("image/png");
+      link.click();
+    }
+  };
+
+  const downloadPngCard = () => {
+    if (!canvasRef.current || !activeCard) return;
+    const isGuest = activeCard.card_type === "guest_certificate" || activeCard.category === "Guest";
+    const cleanName = (activeCard.name || "Attendee").replace(/[/\\?%*:|"<>]/g, "").trim();
+    const prefix = isGuest ? "Rotary Guest Certificate" : "Rotary Make-Up";
     const link = document.createElement("a");
-    link.download = `makeup-card-${activeCard.card_id}.png`;
+    link.download = `${prefix} - ${cleanName}.png`;
     link.href = canvasRef.current.toDataURL("image/png");
     link.click();
   };
+
   const emailCard = () => {
     if (!activeCard) return;
-    const subject = encodeURIComponent(`${settings.club_name} — Make-Up Card`);
-    const body = encodeURIComponent(`Hi ${activeCard.name},\n\nThis confirms your make-up: ${activeCard.detail}\nDate: ${prettyDate(activeCard.activity_date)}\nCard ID: ${activeCard.card_id}\n\nPlease attach the downloaded card image before sending.\n\n${settings.club_name}`);
+    const isGuest = activeCard.card_type === "guest_certificate" || activeCard.category === "Guest";
+    const docName = isGuest ? "Certificate of Fellowship" : "Make-Up Card";
+    const subject = encodeURIComponent(`Thank you for visiting ${settings.club_name}!`);
+    const body = encodeURIComponent(
+      `Dear ${activeCard.name},\n\n` +
+      `Thank you for visiting the ${settings.club_name} for our fellowship!\n\n` +
+      `Please find your official ${docName} attached.\n\n` +
+      `Meeting: ${settings.meeting_label}\n` +
+      `Date: ${prettyDate(activeCard.activity_date)}\n` +
+      `Document ID: ${activeCard.card_id}\n\n` +
+      (isGuest
+        ? `We truly enjoyed having you with us as our honored guest and look forward to welcoming you back to our next meeting!\n\n`
+        : `This confirms your make-up attendance for your home club records.\n\n`) +
+      `Yours in Rotary Service,\n` +
+      `${settings.club_name}\n` +
+      `"Service Above Self"`
+    );
     window.open(`mailto:${activeCard.email}?subject=${subject}&body=${body}`, "_blank");
   };
 
@@ -446,7 +579,7 @@ export default function App() {
     } else if (which === "attendance") {
       downloadBlob("rotary-attendance.csv", csv([["Member Name","Buddy Group","Meeting Date","Signed In At"], ...attendance.map((a) => [a.member_name, a.buddy_group, a.meeting_date, a.signed_in_at])]));
     } else {
-      downloadBlob("rotary-makeups.csv", csv([["Name","Home Club","Email","Detail","Date","Verified","Card ID","Logged At"], ...makeups.map((m) => [m.name, m.buddy_group, m.email, m.detail, m.activity_date, m.verified ? "Yes" : "No", m.card_id, m.logged_at])]));
+      downloadBlob("rotary-certificates-makeups.csv", csv([["Name","Home Club","Email","Detail","Date","Verified","Card ID","Logged At"], ...makeups.map((m) => [m.name, m.buddy_group, m.email, m.detail, m.activity_date, m.verified ? "Yes" : "No", m.card_id, m.logged_at])]));
     }
   };
 
@@ -473,11 +606,11 @@ export default function App() {
         .rot-bg-logo { position:absolute; width:900px; max-width:none; top:50%; left:50%; transform:translate(-50%,-50%); opacity:0.06; pointer-events:none; filter:grayscale(1) brightness(2); }
         .rot-logo-top { display:block; margin:0 auto 16px; height:64px; width:auto; }
         .rot-district-footer { text-align:center; padding:26px 0 6px; font-size:11px; letter-spacing:0.14em; color:rgba(245,246,255,0.35); text-transform:uppercase; position:relative; z-index:1; }
-        .rot-landing-content { position:relative; z-index:1; max-width:760px; }
+        .rot-landing-content { position:relative; z-index:1; max-width:780px; }
         .rot-landing-eyebrow { letter-spacing:0.22em; font-size:12px; font-weight:700; color:var(--amber); text-transform:uppercase; }
         .rot-landing-title { font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:52px; line-height:1.05; margin:14px 0 4px; background:linear-gradient(100deg,#fff 20%,var(--blue) 60%,var(--coral) 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }
         .rot-landing-tagline { color:var(--amber); font-size:13px; font-weight:700; letter-spacing:0.16em; margin:0 0 18px; }
-        .rot-landing-sub { color:rgba(245,246,255,0.65); font-size:16px; max-width:520px; margin:0 auto 30px; }
+        .rot-landing-sub { color:rgba(245,246,255,0.65); font-size:16px; max-width:540px; margin:0 auto 30px; }
         .rot-landing-ctas { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; }
         .rot-cta { flex:1; min-width:210px; max-width:240px; background:rgba(245,246,255,0.05); border:1px solid var(--line); backdrop-filter:blur(12px); border-radius:18px; padding:24px 20px; cursor:pointer; text-align:left; transition:transform .15s ease, border-color .15s ease, background .15s ease; }
         .rot-cta:hover { transform:translateY(-4px); border-color:rgba(245,246,255,0.3); background:rgba(245,246,255,0.08); }
@@ -530,17 +663,17 @@ export default function App() {
         .rot-badge-verified, .rot-badge-green { color:#3DDC91; background:rgba(61,220,145,0.14); }
         .rot-badge-pending { color:#FF7B72; background:rgba(255,123,114,0.12); }
         .rot-badge-blue { color:#60A5FA; background:rgba(96,165,250,0.14); }
-        .rot-toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); padding:10px 18px; border-radius:10px; font-size:14px; font-weight:600; background:var(--ink2); border:1px solid var(--line); color:#fff; z-index:200; display:flex; gap:8px; align-items:center; box-shadow:0 10px 30px rgba(0,0,0,0.4); }
+        .rot-toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); padding:12px 22px; border-radius:12px; font-size:14px; font-weight:600; background:var(--ink2); border:1px solid var(--line); color:#fff; z-index:200; display:flex; gap:8px; align-items:center; box-shadow:0 10px 30px rgba(0,0,0,0.5); }
         .rot-toast.err { border-color:rgba(255,123,114,0.4); }
         .rot-stats { display:flex; gap:14px; margin-bottom:20px; flex-wrap:wrap; }
         .rot-stat { flex:1; min-width:130px; border:1px solid var(--line); border-radius:12px; padding:16px; text-align:center; background:rgba(245,246,255,0.02); }
         .rot-stat .n { font-family:'Space Grotesk',sans-serif; font-size:28px; font-weight:800; background:linear-gradient(120deg,var(--blue),var(--coral)); -webkit-background-clip:text; background-clip:text; color:transparent; }
         .rot-stat .l { font-size:11px; color:rgba(245,246,255,0.5); text-transform:uppercase; letter-spacing:0.05em; margin-top:2px; }
-        .rot-card-preview { display:flex; flex-direction:column; align-items:center; gap:14px; margin-top:18px; }
-        .rot-card-preview canvas { width:100%; max-width:640px; border-radius:14px; box-shadow:0 20px 50px rgba(0,0,0,0.45); }
-        .rot-modal-backdrop { position:fixed; inset:0; background:rgba(5,7,16,0.75); backdrop-filter:blur(4px); z-index:100; display:flex; align-items:center; justify-content:center; padding:20px; overflow-y:auto; }
-        .rot-modal { position:relative; background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:24px; max-width:680px; width:100%; box-shadow:0 30px 80px rgba(0,0,0,0.5); }
-        .rot-modal-close { position:absolute; top:12px; right:12px; background:rgba(245,246,255,0.08); border:1px solid var(--line); border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--paper); }
+        .rot-card-preview { display:flex; flex-direction:column; align-items:center; gap:14px; margin-top:14px; }
+        .rot-card-preview canvas { width:100%; max-width:660px; border-radius:14px; box-shadow:0 20px 50px rgba(0,0,0,0.5); }
+        .rot-modal-backdrop { position:fixed; inset:0; background:rgba(5,7,16,0.8); backdrop-filter:blur(5px); z-index:100; display:flex; align-items:center; justify-content:center; padding:20px; overflow-y:auto; }
+        .rot-modal { position:relative; background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:24px; max-width:700px; width:100%; box-shadow:0 30px 80px rgba(0,0,0,0.6); }
+        .rot-modal-close { position:absolute; top:14px; right:14px; background:rgba(245,246,255,0.08); border:1px solid var(--line); border-radius:50%; width:34px; height:34px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--paper); }
         .rot-empty { text-align:center; color:rgba(245,246,255,0.4); font-size:14px; padding:24px 0; }
         .rot-makeup-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
         .rot-card-lookup { margin-top:18px; padding-top:18px; border-top:1px dashed var(--line); }
@@ -624,7 +757,7 @@ export default function App() {
             <div className="rot-landing-eyebrow">Weekly Attendance · Buddy Groups · Make-Ups</div>
             <h1 className="rot-landing-title">{settings.club_name}</h1>
             <div className="rot-landing-tagline">“SERVICE ABOVE SELF”</div>
-            <p className="rot-landing-sub">Sign in for today's weekly fellowship meeting, view your Buddy Group leaderboard standings, or register as a visiting Rotarian.</p>
+            <p className="rot-landing-sub">Sign in for today's weekly fellowship meeting, view your Buddy Group leaderboard standings, or register as a visiting Rotarian/Guest.</p>
             
             <div className="rot-landing-ctas">
               <div className="rot-cta" onClick={() => enterApp("members")}>
@@ -639,8 +772,8 @@ export default function App() {
               </div>
               <div className="rot-cta" onClick={() => enterApp("visitors")}>
                 <div className="rot-cta-icon blue"><UserPlus size={20} color="#fff" /></div>
-                <h3>Visiting Rotarian</h3>
-                <p>Register as a guest or visitor and download your make-up card.</p>
+                <h3>Visitors & Guests</h3>
+                <p>Register to receive your official Make-Up or Fellowship Certificate.</p>
               </div>
             </div>
 
@@ -664,7 +797,7 @@ export default function App() {
         <div className="rot-tabs">
           <button className={`rot-tab ${tab === "members" ? "active" : ""}`} onClick={() => setTab("members")}><UsersRound size={16}/> Members</button>
           <button className={`rot-tab ${tab === "leaderboard" ? "active" : ""}`} onClick={() => setTab("leaderboard")}><Trophy size={16}/> Leaderboard</button>
-          <button className={`rot-tab ${tab === "visitors" ? "active" : ""}`} onClick={() => setTab("visitors")}><UserPlus size={16}/> Visitors</button>
+          <button className={`rot-tab ${tab === "visitors" ? "active" : ""}`} onClick={() => setTab("visitors")}><UserPlus size={16}/> Visitors & Guests</button>
           <button className={`rot-tab ${tab === "qr" ? "active" : ""}`} onClick={() => setTab("qr")}><QrCode size={16}/> Door QR</button>
           <button className={`rot-tab ${tab === "admin" ? "active" : ""}`} onClick={() => setTab("admin")}><ShieldCheck size={16}/> Admin {adminUnlocked ? "" : "🔒"}</button>
         </div>
@@ -877,41 +1010,60 @@ export default function App() {
               </div>
             )}
 
-            {/* ===================== VISITORS TAB ===================== */}
+            {/* ===================== VISITORS & GUESTS TAB ===================== */}
             {tab === "visitors" && (
               <div className="rot-panel">
-                <p style={{ marginTop: 0, color: "rgba(245,246,255,0.55)", fontSize: 14 }}>Not a member of {settings.club_name}? Register here as a visitor — this is open to anyone.</p>
+                <p style={{ marginTop: 0, color: "rgba(245,246,255,0.6)", fontSize: 14 }}>
+                  Not a member of {settings.club_name}? Register here to receive your personalized digital Make-Up Card or Guest Certificate of Fellowship.
+                </p>
                 <div className="rot-field"><label>Full name</label><input value={visForm.name} onChange={(e) => setVisForm({ ...visForm, name: e.target.value })} placeholder="e.g. Grace Nabatanzi" /></div>
-                <div className="rot-row">
-                  <div className="rot-field"><label>Your club</label><input value={visForm.club} onChange={(e) => setVisForm({ ...visForm, club: e.target.value })} placeholder="e.g. Rotary Club of Entebbe" /></div>
-                  <div className="rot-field"><label>Email</label><input type="email" value={visForm.email} onChange={(e) => setVisForm({ ...visForm, email: e.target.value })} placeholder="you@example.com" /></div>
-                </div>
+                
                 <div className="rot-field">
                   <label>You are a</label>
                   <div className="rot-category-picker">
-                    {["Rotarian","Rotaract","Guest"].map((c) => (
+                    {["Guest","Rotarian","Rotaract"].map((c) => (
                       <button
                         type="button"
                         key={c}
                         className={`rot-category-btn ${visForm.category === c ? "active" : ""}`}
                         onClick={() => setVisForm({ ...visForm, category: c })}
                       >
-                        {c}
+                        {c === "Guest" ? "🌟 Guest" : c}
                       </button>
                     ))}
                   </div>
-                  {(visForm.category === "Rotarian" || visForm.category === "Rotaract") && (
-                    <div className="rot-notice">You'll get a digital make-up card after registering — proof of attendance to take back to your own club.</div>
-                  )}
                 </div>
-                <button type="button" className="rot-btn rot-btn-block" disabled={visBusy} onClick={submitVisitor}>
-                  {visBusy ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16}/>} Register as visitor
+
+                <div className="rot-row">
+                  <div className="rot-field">
+                    <label>{visForm.category === "Guest" ? "Organization / Invited by (Optional)" : "Home Club"}</label>
+                    <input
+                      value={visForm.club}
+                      onChange={(e) => setVisForm({ ...visForm, club: e.target.value })}
+                      placeholder={visForm.category === "Guest" ? "e.g. Guest of Rtn. John" : "e.g. Rotary Club of Entebbe"}
+                    />
+                  </div>
+                  <div className="rot-field"><label>Email</label><input type="email" value={visForm.email} onChange={(e) => setVisForm({ ...visForm, email: e.target.value })} placeholder="you@example.com" /></div>
+                </div>
+
+                <div className="rot-notice">
+                  {visForm.category === "Guest"
+                    ? "✨ Guests receive a specially designed Certificate of Fellowship & Appreciation as a warm welcome to our club!"
+                    : "📄 Rotarians & Rotaractors receive an official Make-Up Card with date, card ID, and attendance proof for their home club."}
+                </div>
+
+                <button type="button" className="rot-btn rot-btn-block" style={{ marginTop: 14 }} disabled={visBusy} onClick={submitVisitor}>
+                  {visBusy ? <Loader2 size={16} className="animate-spin" /> : <Award size={16}/>}
+                  {visForm.category === "Guest" ? "Register & Get Guest Certificate" : "Register & Get Make-Up Card"}
                 </button>
-                <div className="rot-notice">{todayVisitors.length} visitor(s) registered today · {visitors.length} all-time.</div>
+                
+                <div className="rot-notice" style={{ background: "rgba(255,255,255,0.02)" }}>
+                  {todayVisitors.length} visitor(s) registered today · {visitors.length} all-time.
+                </div>
 
                 <div className="rot-card-lookup">
                   <button type="button" className="rot-card-lookup-toggle" onClick={() => setShowCardLookup(!showCardLookup)}>
-                    <ClipboardList size={14} /> Already registered? Get your make-up card
+                    <ClipboardList size={14} /> Already registered? Find & download your certificate
                   </button>
                   {showCardLookup && (
                     <div style={{ marginTop: 12 }}>
@@ -921,13 +1073,18 @@ export default function App() {
                       </div>
                       {cardLookupQuery.trim() && (
                         cardLookupResults.length === 0 ? (
-                          <div className="rot-empty">No make-up card found for that name.</div>
+                          <div className="rot-empty">No certificates found for that name.</div>
                         ) : (
                           <div className="rot-list">
                             {cardLookupResults.map((mk) => (
                               <div className="rot-person" key={mk.id}>
-                                <div><strong>{mk.name}</strong><div className="meta">Visiting from {mk.buddy_group} · {prettyDate(mk.activity_date)}</div></div>
-                                <button type="button" className="rot-btn ghost" onClick={() => setActiveCard(mk)}>View card</button>
+                                <div>
+                                  <strong>{mk.name}</strong>
+                                  <div className="meta">{mk.buddy_group} · {prettyDate(mk.activity_date)}</div>
+                                </div>
+                                <button type="button" className="rot-btn ghost" onClick={() => setActiveCard(mk)}>
+                                  View Certificate
+                                </button>
                               </div>
                             ))}
                           </div>
@@ -987,17 +1144,31 @@ export default function App() {
 
       {toast && <div className={`rot-toast ${toast.kind === "err" ? "err" : ""}`}>{toast.kind === "err" ? <AlertCircle size={16}/> : <CheckCircle2 size={16}/>} {toast.msg}</div>}
 
+      {/* ===================== CERTIFICATE / MAKE-UP CARD MODAL ===================== */}
       {activeCard && (
         <div className="rot-modal-backdrop" onClick={() => setActiveCard(null)}>
           <div className="rot-modal" onClick={(e) => e.stopPropagation()}>
             <button type="button" className="rot-modal-close" onClick={() => setActiveCard(null)}><X size={18}/></button>
             <div className="rot-card-preview">
               <canvas ref={canvasRef} />
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
-                <button type="button" className="rot-btn ghost" onClick={downloadCard}><Download size={15}/> Download card</button>
-                <button type="button" className="rot-btn" onClick={emailCard}><Mail size={15}/> Email myself</button>
+              
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", width: "100%", marginTop: 8 }}>
+                <button type="button" className="rot-btn green" onClick={downloadPdfCard} style={{ flex: "1 1 200px" }}>
+                  <FileText size={16}/> Download PDF ({activeCard.card_type === "guest_certificate" || activeCard.category === "Guest" ? "Rotary Guest Certificate" : "Rotary Make-Up"} - {activeCard.name})
+                </button>
+                <button type="button" className="rot-btn ghost" onClick={downloadPngCard} title="Download as PNG image">
+                  <Download size={15}/> PNG Image
+                </button>
+                <button type="button" className="rot-btn gold" onClick={emailCard} style={{ flex: "1 1 180px" }}>
+                  <Mail size={16}/> Email Certificate
+                </button>
               </div>
-              <div className="rot-notice" style={{ maxWidth: 500, textAlign: "center" }}>"Email myself" opens your own email app addressed to <strong>{activeCard.email}</strong>. Attach the downloaded card before sending.</div>
+
+              <div className="rot-notice" style={{ maxWidth: 620, textAlign: "center", lineHeight: 1.5 }}>
+                💡 <strong>PDF Document:</strong> Downloads as <code>{activeCard.card_type === "guest_certificate" || activeCard.category === "Guest" ? `Rotary Guest Certificate - ${activeCard.name}.pdf` : `Rotary Make-Up - ${activeCard.name}.pdf`}</code>.
+                <br />
+                ✉️ <strong>Emailing:</strong> "Email Certificate" generates a pre-formatted appreciation message with meeting details ready to send to <strong>{activeCard.email}</strong>.
+              </div>
             </div>
           </div>
         </div>
@@ -1044,7 +1215,7 @@ function AdminPanel(props) {
           ["groups","Buddy Groups",UsersRound],
           ["members","Members",Users],
           ["visitors","Visitors",UserPlus],
-          ["makeups","Make-Up Ledger",ClipboardList],
+          ["makeups","Certificates & Make-Ups",ClipboardList],
           ["settings","Settings",Settings]
         ].map(([id,label]) => (
           <button key={id} className={`rot-subtab ${section === id ? "active" : ""}`} onClick={() => setSection(id)}>{label}</button>
@@ -1059,7 +1230,7 @@ function AdminPanel(props) {
             <div className="rot-stat"><div className="n">{visitors.filter((v) => v.visit_date === todayISO()).length}</div><div className="l">Visitors Today</div></div>
             <div className="rot-stat"><div className="n">{members.length}</div><div className="l">Total Members</div></div>
             <div className="rot-stat"><div className="n">{buddyGroups.length}</div><div className="l">Buddy Groups</div></div>
-            <div className="rot-stat"><div className="n">{makeups.length}</div><div className="l">Make-Ups Logged</div></div>
+            <div className="rot-stat"><div className="n">{makeups.length}</div><div className="l">Certificates Issued</div></div>
           </div>
           <button type="button" className="rot-btn ghost" onClick={loadAll}><RotateCcw size={15}/> Refresh Data</button>
         </>
@@ -1174,7 +1345,7 @@ function AdminPanel(props) {
       {section === "visitors" && (
         <>
           <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-            {["All","Rotarian","Rotaract","Guest"].map((f) => <button key={f} type="button" className={`rot-subtab ${visitorFilter === f ? "active" : ""}`} onClick={() => setVisitorFilter(f)}>{f}</button>)}
+            {["All","Guest","Rotarian","Rotaract"].map((f) => <button key={f} type="button" className={`rot-subtab ${visitorFilter === f ? "active" : ""}`} onClick={() => setVisitorFilter(f)}>{f}</button>)}
             <button type="button" className="rot-btn ghost" onClick={() => exportCsv("visitors")}><Download size={15}/> Export CSV</button>
           </div>
           {filteredVisitors.length === 0 ? <div className="rot-empty">No visitors match this filter.</div> : (
@@ -1185,7 +1356,7 @@ function AdminPanel(props) {
         </>
       )}
 
-      {/* MAKEUPS */}
+      {/* CERTIFICATES & MAKEUPS */}
       {section === "makeups" && (
         <>
           <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
@@ -1194,13 +1365,13 @@ function AdminPanel(props) {
             ))}
             <button type="button" className="rot-btn ghost" onClick={() => exportCsv("makeups")}><Download size={15}/> Export CSV</button>
           </div>
-          {filteredMakeups.length === 0 ? <div className="rot-empty">No make-ups match this filter.</div> : (
+          {filteredMakeups.length === 0 ? <div className="rot-empty">No certificates match this filter.</div> : (
             <div className="rot-list">{filteredMakeups.map((mk) => (
               <div className="rot-person" key={mk.id}>
-                <div><strong>{mk.name}</strong><div className="meta">Visiting from {mk.buddy_group} · {prettyDate(mk.activity_date)} · {mk.detail}</div></div>
+                <div><strong>{mk.name}</strong><div className="meta">{mk.buddy_group} · {prettyDate(mk.activity_date)} · {mk.detail}</div></div>
                 <div className="rot-makeup-actions">
                   <span className={`rot-badge ${mk.verified ? "rot-badge-verified" : "rot-badge-pending"}`}>{mk.verified ? "Verified" : "Pending"}</span>
-                  <button type="button" className="rot-btn ghost" onClick={() => setActiveCard(mk)}>View card</button>
+                  <button type="button" className="rot-btn ghost" onClick={() => setActiveCard(mk)}>View Certificate</button>
                   <button type="button" className={mk.verified ? "rot-btn ghost" : "rot-btn gold"} onClick={() => toggleVerified(mk)}>{mk.verified ? "Unverify" : "Verify"}</button>
                 </div>
               </div>
