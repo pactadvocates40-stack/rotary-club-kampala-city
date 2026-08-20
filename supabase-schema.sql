@@ -44,17 +44,28 @@ create table if not exists makeups (
   detail text not null,
   activity_date date not null,
   card_id text not null unique,
+  verified boolean default false,
+  verified_at timestamptz,
   logged_at timestamptz not null default now()
 );
 
--- Row Level Security: this is a low-security internal club tool, so we allow
--- the public "anon" key to read/write freely (same trust model as before —
--- anyone with the link can use the app). Enable + open policies below.
+create table if not exists attendance (
+  id bigint generated always as identity primary key,
+  member_id bigint references members(id) on delete cascade,
+  member_name text not null,
+  buddy_group text not null,
+  meeting_date date not null default current_date,
+  signed_in_at timestamptz not null default now(),
+  constraint unique_member_meeting unique (member_id, meeting_date)
+);
+
+-- Row Level Security: low-security internal club tool, allow public "anon" key access
 alter table settings enable row level security;
 alter table buddy_groups enable row level security;
 alter table members enable row level security;
 alter table visitors enable row level security;
 alter table makeups enable row level security;
+alter table attendance enable row level security;
 
 create policy "public read settings" on settings for select using (true);
 create policy "public update settings" on settings for update using (true);
@@ -72,3 +83,8 @@ create policy "public insert visitors" on visitors for insert with check (true);
 
 create policy "public read makeups" on makeups for select using (true);
 create policy "public insert makeups" on makeups for insert with check (true);
+create policy "public update makeups" on makeups for update using (true);
+
+create policy "public read attendance" on attendance for select using (true);
+create policy "public insert attendance" on attendance for insert with check (true);
+create policy "public delete attendance" on attendance for delete using (true);
